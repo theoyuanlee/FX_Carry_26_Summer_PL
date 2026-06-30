@@ -1,0 +1,9 @@
+group,ticker,fields,error
+em_fx_spot_forward,CNY1M Curncy,"PX_LAST,PX_BID,PX_ASK",Ticker not present in Bloomberg output after retry
+em_fx_spot_forward,CNY3M Curncy,"PX_LAST,PX_BID,PX_ASK",Ticker not present in Bloomberg output after retry
+em_fx_spot_forward,CNY6M Curncy,"PX_LAST,PX_BID,PX_ASK",Ticker not present in Bloomberg output after retry
+em_fx_spot_forward,CNY12M Curncy,"PX_LAST,PX_BID,PX_ASK",Ticker not present in Bloomberg output after retry
+em_fx_spot_forward,INR1M Curncy,"PX_LAST,PX_BID,PX_ASK",Ticker not present in Bloomberg output after retry
+em_fx_spot_forward,INR3M Curncy,"PX_LAST,PX_BID,PX_ASK",Ticker not present in Bloomberg output after retry
+em_fx_spot_forward,INR6M Curncy,"PX_LAST,PX_BID,PX_ASK",Ticker not present in Bloomberg output after retry
+em_fx_spot_forward,INR12M Curncy,"PX_LAST,PX_BID,PX_ASK",Ticker not present in Bloomberg output after retry

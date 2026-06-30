@@ -1,0 +1,2 @@
+group,ticker,fields,error
+em_interest_rates,CLSWA Curncy,PX_LAST,Ticker not present in Bloomberg output after retry

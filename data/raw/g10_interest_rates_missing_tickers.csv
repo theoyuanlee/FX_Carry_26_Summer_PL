@@ -1,0 +1,3 @@
+group,missing_ticker,reason
+g10_interest_rates,NIBOR12M Index,No rows returned by Bloomberg/xbbg for this ticker and date range
+g10_interest_rates,STIB12M Index,No rows returned by Bloomberg/xbbg for this ticker and date range

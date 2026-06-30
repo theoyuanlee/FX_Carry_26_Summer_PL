@@ -1,0 +1,12 @@
+group,ticker,note
+em_fx_spot_forward,CNY1M Curncy,requested but not found in saved long CSV
+em_fx_spot_forward,CNY3M Curncy,requested but not found in saved long CSV
+em_fx_spot_forward,CNY6M Curncy,requested but not found in saved long CSV
+em_fx_spot_forward,CNY12M Curncy,requested but not found in saved long CSV
+em_fx_spot_forward,INR1M Curncy,requested but not found in saved long CSV
+em_fx_spot_forward,INR3M Curncy,requested but not found in saved long CSV
+em_fx_spot_forward,INR6M Curncy,requested but not found in saved long CSV
+em_fx_spot_forward,INR12M Curncy,requested but not found in saved long CSV
+g10_interest_rates,NIBOR12M Index,requested but not found in saved long CSV
+g10_interest_rates,STIB12M Index,requested but not found in saved long CSV
+em_interest_rates,CLSWA Curncy,requested but not found in saved long CSV

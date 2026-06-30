@@ -1,0 +1,9 @@
+group,requested,fetched,missing,extra,csv_exists
+em_fx_options,325,325,0,0,True
+em_fx_spot_forward,103,95,8,0,True
+em_interest_rates,35,34,1,0,True
+g10_fx_options,275,275,0,0,True
+g10_fx_spot_forward,66,66,0,0,True
+g10_interest_rates,83,81,2,0,True
+global_risk,19,19,0,0,True
+macro_market_proxies,24,24,0,0,True

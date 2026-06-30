@@ -1,0 +1,3 @@
+group,ticker,fields,error
+g10_interest_rates,NIBOR12M Index,PX_LAST,Ticker not present in Bloomberg output after retry
+g10_interest_rates,STIB12M Index,PX_LAST,Ticker not present in Bloomberg output after retry
