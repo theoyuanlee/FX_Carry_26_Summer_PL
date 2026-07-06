@@ -31,6 +31,11 @@ SLEEP_SECONDS = 0.25
 # Optional: set this to a list if you only want to rerun specific groups.
 # Example:
 # RUN_GROUPS = ["em_fx_spot_forward"]
+#
+# Phase-2 top-up only (see HANDOFF.md) — avoids re-downloading the ~900
+# tickers already in data/raw:
+# RUN_GROUPS = ["fx_carry_benchmarks", "usd_riskfree", "g10_rates_gaps",
+#               "em_onshore_rates", "em_risk"]
 RUN_GROUPS = None
 
 
@@ -759,6 +764,52 @@ macro_market_proxies = [
 ]
 
 
+# ---------- Phase 2 supplemental data (see HANDOFF.md) ----------
+# Tickers marked VERIFY are best guesses: check them on the terminal before
+# running. Wrong tickers are harmless — they end up in *_failures.csv /
+# *_missing_tickers.csv rather than breaking the run.
+
+# FX carry benchmark indices: proper benchmark for information ratios and a
+# sanity check on our own HML_FX construction (entitlement-dependent).
+fx_carry_benchmarks = [
+    "DBHVG10U Index",   # VERIFY: Deutsche Bank G10 FX carry (harvest), USD
+    "FXCTEM8 Index",    # VERIFY: EM-8 FX carry index
+    "DBHVBUSI Index",   # VERIFY: DB balanced currency harvest, USD
+]
+
+# Clean USD risk-free rate.
+usd_riskfree = [
+    "USGG3M Index",     # US generic 3M T-bill yield
+]
+
+# The only G10 currencies with no money-market fixing downloaded so far.
+g10_rates_gaps = [
+    "CIBO01M Index",    # VERIFY: DKK CIBOR 1M
+    "CIBO03M Index",    # VERIFY: DKK CIBOR 3M
+    "HIHD01M Index",    # VERIFY: HKD HIBOR 1M
+    "HIHD03M Index",    # VERIFY: HKD HIBOR 3M
+]
+
+# Onshore fixings for EM currencies whose carry currently relies on forward
+# points alone — enables CIP-basis checks (forward-implied vs onshore rate).
+em_onshore_rates = [
+    "BUBOR01M Index", "BUBOR03M Index",       # HUF BUBOR
+    "WIBR1M Index", "WIBR3M Index",           # PLN WIBOR
+    "TRLIB1M Index", "TRLIB3M Index",         # VERIFY: TRY TRLIBOR
+    "TELBOR01M Index", "TELBOR03M Index",     # VERIFY: ILS TELBOR
+    "THFX1M Index", "THFX3M Index",           # VERIFY: THB THBFIX
+    "MIBOR1M Index", "MIFOR3M Index",         # VERIFY: INR MIBOR / MIFOR
+    "NSERO Index",                            # VERIFY: INR NSE overnight MIBOR
+    "SORA Index",                             # VERIFY: SGD SORA overnight
+    "HICNH01M Index", "HICNH03M Index",       # VERIFY: CNH HIBOR fixing
+]
+
+# EM sovereign credit factor (optional tier).
+em_risk = [
+    "JPEIGLSP Index",   # VERIFY: JPM EMBI Global sovereign spread
+]
+
+
 def load_manual_macro_tickers(path: str | Path = "manual_macro_tickers.csv") -> list[str]:
     """
     Optional:
@@ -827,6 +878,27 @@ GROUPS = {
     },
     "manual_macro_tickers": {
         "tickers": manual_macro_tickers,
+        "fields": LAST_FIELD,
+    },
+    # Phase 2 supplemental groups (see HANDOFF.md)
+    "fx_carry_benchmarks": {
+        "tickers": fx_carry_benchmarks,
+        "fields": LAST_FIELD,
+    },
+    "usd_riskfree": {
+        "tickers": usd_riskfree,
+        "fields": LAST_FIELD,
+    },
+    "g10_rates_gaps": {
+        "tickers": g10_rates_gaps,
+        "fields": LAST_FIELD,
+    },
+    "em_onshore_rates": {
+        "tickers": em_onshore_rates,
+        "fields": LAST_FIELD,
+    },
+    "em_risk": {
+        "tickers": em_risk,
         "fields": LAST_FIELD,
     },
 }
