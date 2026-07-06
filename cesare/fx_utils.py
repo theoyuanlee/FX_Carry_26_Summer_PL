@@ -229,3 +229,102 @@ def regression_table(xret: pd.DataFrame, factors: pd.DataFrame, lags: int = 5) -
         if res is not None:
             rows[ccy] = res
     return pd.DataFrame(rows).T
+
+
+# ---------------------------------------------------------------------------
+# Phase-2 supplemental groups: risk-free, onshore rates, benchmarks, EM risk
+# ---------------------------------------------------------------------------
+# Source: data/raw/FX_extra_data.xlsx -> converted to parquet by
+# src/convert_extra_xlsx.py, so these load through load_wide() like any group.
+
+USD_RF = "USGG3M"                                # US 3M T-bill, risk-free anchor
+USD_LIBOR = {"1M": "US0001M", "3M": "US0003M"}   # CIP-consistent USD leg (g10_interest_rates)
+
+# Onshore money-market fixing per currency and tenor (in percent), used for
+# CIP-basis checks: forward-implied carry vs onshore interest differential.
+# Caveats: INR uses MIBOR-OIS (IRSWO); the o/n NSERO fixing is spiky and GIND3M
+# (T-bill) is also available. CNH uses onshore SHIBOR (SHIF) as a China-rate
+# proxy -- it is NOT the offshore CNH funding rate.
+ONSHORE_RATES = {
+    "HUF": {"1M": "BUBOR01M", "3M": "BUBOR03M"},
+    "PLN": {"1M": "WIBR1M", "3M": "WIBR3M"},
+    "TRY": {"1M": "TRLIB1M", "3M": "TRLIB3M"},
+    "ILS": {"1M": "TELBOR01M", "3M": "TELBOR03M"},
+    "THB": {"1M": "THFX1M", "3M": "THFX3M"},
+    "INR": {"1M": "IRSWOA", "3M": "IRSWOC"},
+    "DKK": {"1M": "CIBO01M", "3M": "CIBO03M"},
+    "HKD": {"1M": "HIHD01M", "3M": "HIHD03M"},
+    "CNH": {"1M": "SHIF1M", "3M": "SHIF3M"},
+}
+
+
+def load_rates_panel() -> pd.DataFrame:
+    """All money-market fixings for CIP checks (percent), one wide frame by ticker.
+
+    Combines onshore EM fixings, DKK/HKD gap fixings, the USD risk-free anchor
+    and USD LIBOR legs, date-aligned.
+    """
+    frames = [load_wide("em_onshore_rates"), load_wide("g10_rates_gaps"),
+              load_wide("usd_riskfree")]
+    g10r = load_wide("g10_interest_rates")
+    frames.append(g10r[[t for t in USD_LIBOR.values() if t in g10r.columns]])
+    return pd.concat(frames, axis=1).sort_index()
+
+
+def onshore_rate(ccy: str, tenor: str, rates: pd.DataFrame | None = None) -> pd.Series | None:
+    """Onshore fixing for (ccy, tenor) as a decimal rate (percent / 100)."""
+    tk = ONSHORE_RATES.get(ccy, {}).get(tenor)
+    if tk is None:
+        return None
+    rates = load_rates_panel() if rates is None else rates
+    if tk not in rates.columns:
+        return None
+    return (rates[tk] / 100.0).rename(ccy)
+
+
+def interest_diff_vs_usd(tenor: str = "3M", rates: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Onshore foreign rate minus USD LIBOR (annual decimal), per currency.
+
+    The CIP-implied carry: under covered interest parity this equals the
+    forward-implied carry (carry_panel). USD leg is LIBOR at the same tenor.
+    """
+    rates = load_rates_panel() if rates is None else rates
+    usd_tk = USD_LIBOR.get(tenor)
+    if usd_tk is None or usd_tk not in rates.columns:
+        raise ValueError(f"No USD LIBOR leg for tenor {tenor!r}")
+    usd = rates[usd_tk] / 100.0
+    out = {}
+    for ccy in ONSHORE_RATES:
+        s = onshore_rate(ccy, tenor, rates)
+        if s is not None:
+            out[ccy] = s - usd
+    return pd.DataFrame(out)
+
+
+def cip_basis(g10_px: pd.DataFrame, em_px: pd.DataFrame, tenor: str = "3M",
+              rates: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Cross-currency basis: forward-implied carry minus onshore rate differential.
+
+    ~0 where covered interest parity holds (deliverable currencies); materially
+    non-zero and persistent for NDF currencies (convertibility/basis premium).
+    Both legs are annualised decimals, aligned on common currencies and dates.
+    """
+    carry = carry_panel(g10_px, em_px, tenor=tenor)
+    diff = interest_diff_vs_usd(tenor=tenor, rates=rates)
+    common = carry.columns.intersection(diff.columns)
+    return (carry[common] - diff[common]).dropna(how="all")
+
+
+def load_benchmarks() -> pd.DataFrame:
+    """Carry benchmark index levels (DBHVG10U, FXCTEM8, DBHVBUSI)."""
+    return load_wide("fx_carry_benchmarks")
+
+
+def benchmark_returns() -> pd.DataFrame:
+    """Daily log returns of the carry benchmark indices."""
+    return np.log(load_benchmarks()).diff()
+
+
+def load_em_risk() -> pd.Series:
+    """JPM EMBI Global sovereign spread (basis points)."""
+    return load_wide("em_risk")["JPEIGLSP"].rename("EMBI_spread")
