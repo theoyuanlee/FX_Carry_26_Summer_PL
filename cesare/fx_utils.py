@@ -328,3 +328,196 @@ def benchmark_returns() -> pd.DataFrame:
 def load_em_risk() -> pd.Series:
     """JPM EMBI Global sovereign spread (basis points)."""
     return load_wide("em_risk")["JPEIGLSP"].rename("EMBI_spread")
+
+
+# ---------------------------------------------------------------------------
+# Portfolio construction: bucket sorts, vol targeting, transaction costs
+# ---------------------------------------------------------------------------
+
+def carry_portfolio(carry_ann: pd.DataFrame, xret: pd.DataFrame, n_buckets: int = 3,
+                    rebal: str = "ME", vol_window: int = 60, min_per_leg: int = 2,
+                    universe: list[str] | None = None,
+                    max_leg_share: float = 0.40) -> pd.DataFrame:
+    """Daily weight panel of an inverse-vol long/short carry sort.
+
+    On each rebalance date (last observation per `rebal` period) currencies are
+    sorted on carry into n_buckets; the top bucket is held long, the bottom
+    short. Within each leg weights are proportional to 1/trailing-vol
+    (vol_window days, needing >= vol_window//2 observations, which gates late
+    entrants like CNH), normalised to gross 1 per side (book gross 2, net 0),
+    with any single name capped at max_leg_share of its leg. A rebalance date
+    with fewer than min_per_leg names per bucket keeps the previous weights.
+    Weights are forward-filled to trading days and shifted one day — applied
+    from the next trading day, mirroring carry_hml_factor (no lookahead).
+    Note: signals are per-column last observations of the period, so a gappy
+    currency can contribute a slightly stale (intra-month) carry reading.
+    """
+    cols = carry_ann.columns.intersection(xret.columns)
+    if universe is not None:
+        cols = cols.intersection(universe)
+    signal = carry_ann[cols].resample(rebal).last()
+    vol = xret[cols].rolling(vol_window, min_periods=vol_window // 2).std()
+    vol_rb = vol.resample(rebal).last()
+
+    rows = {}
+    for dt in signal.index:
+        valid = pd.concat([signal.loc[dt].rename("carry"),
+                           vol_rb.loc[dt].rename("vol")], axis=1).dropna()
+        valid = valid[valid["vol"] > 0]
+        k = len(valid) // n_buckets
+        if k < min_per_leg:
+            continue
+        w = pd.Series(0.0, index=cols)
+        for names, sign in ((valid["carry"].nlargest(k).index, 1.0),
+                            (valid["carry"].nsmallest(k).index, -1.0)):
+            leg = (1.0 / valid.loc[names, "vol"])
+            leg /= leg.sum()
+            for _ in range(10):
+                if not (leg > max_leg_share + 1e-12).any():
+                    break
+                leg = leg.clip(upper=max_leg_share)
+                leg /= leg.sum()
+            w[names] = sign * leg
+        rows[dt] = w
+    weights = pd.DataFrame(rows).T
+    return weights.reindex(xret.index, method="ffill").shift(1)
+
+
+def vol_target_weights(weights: pd.DataFrame, xret: pd.DataFrame, target: float = 0.10,
+                       window: int = 60, rebal: str = "ME", lev_cap: float = 4.0,
+                       vol_floor: float = 0.01) -> pd.DataFrame:
+    """Scale a daily weight panel to an annualised portfolio vol target.
+
+    The scalar is target / trailing realised vol of the unit book's own return
+    series — not an ex-ante w'Σw: with ~27 assets a 60-day sample covariance is
+    noisy/near-singular, while the unit book's realised vol already embeds all
+    correlations and the book composition only changes monthly. The scalar is
+    sampled at rebalance dates, capped at lev_cap, floored at vol_floor
+    annualised vol, and applied from the next trading day (no lookahead).
+    """
+    common = weights.columns.intersection(xret.columns)
+    r_unit = (weights[common] * xret[common]).sum(axis=1, min_count=1)
+    vol = r_unit.rolling(window, min_periods=window // 2).std() * np.sqrt(ANN_DAYS)
+    scalar = (target / vol.clip(lower=vol_floor)).clip(upper=lev_cap)
+    scalar_rb = scalar.resample(rebal).last()
+    daily = scalar_rb.reindex(weights.index, method="ffill").shift(1)
+    return weights.mul(daily, axis=0)
+
+
+def portfolio_returns(weights: pd.DataFrame, xret: pd.DataFrame,
+                      name: str = "portfolio") -> pd.Series:
+    """Daily portfolio return Σ w·r (min_count=1 so pre-inception days stay NaN).
+
+    Summing weighted log excess returns is a daily-frequency approximation of
+    the true portfolio return; fine at these vol levels.
+    """
+    common = weights.columns.intersection(xret.columns)
+    return (weights[common] * xret[common]).sum(axis=1, min_count=1).rename(name)
+
+
+def forward_halfspreads(tenor: str = "1M", winsor_q: float = 0.99,
+                        ffill_limit: int = 5) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Relative half-spreads per currency for forward trading and rolling.
+
+    Returns (hs_outright, hs_points), both as fractions of mid notional:
+    - hs_outright: (F_ask - F_bid) / (2 F_mid) with F_side built from spot
+      bid/ask plus forward points bid/ask on the same side (points get the
+      same FWD_SCALE division as carry_panel) — the cost of crossing the full
+      outright forward, paid on notional that is newly transacted.
+    - hs_points: points spread only, (P_ask - P_bid)/scale / (2 S_mid) — the
+      cost of rolling a maintained position via an FX swap whose spot leg
+      crosses at mid.
+    Relative half-spreads are invariant to quote inversion, so no USD-per-FX
+    handling is needed. Cleaning: crossed quotes clipped at 0, per-currency
+    winsorisation at winsor_q, forward-fill up to ffill_limit days (some EM
+    bid columns are gappy: ZAR ~95%, CNH ~81% coverage).
+    """
+    fields = {f: pd.concat([load_wide("g10_fx_spot_forward", f),
+                            load_wide("em_fx_spot_forward", f)], axis=1)
+              for f in ("PX_BID", "PX_ASK", "PX_LAST")}
+    hs_out, hs_pts = {}, {}
+    for ccy in ALL_CCY:
+        root = FWD_ROOT.get(ccy)
+        fwd_tk = None if root is None else f"{root}{tenor}"
+        if fwd_tk is None or ccy not in fields["PX_LAST"].columns \
+                or fwd_tk not in fields["PX_LAST"].columns:
+            continue
+        scale = FWD_SCALE[ccy]
+        s_bid, s_ask, s_mid = (fields[f][ccy] for f in ("PX_BID", "PX_ASK", "PX_LAST"))
+        p_bid, p_ask = fields["PX_BID"][fwd_tk], fields["PX_ASK"][fwd_tk]
+        f_bid = s_bid + p_bid / scale
+        f_ask = s_ask + p_ask / scale
+        f_mid = s_mid + (p_bid + p_ask) / (2 * scale)
+        hs_out[ccy] = (f_ask - f_bid) / (2 * f_mid)
+        hs_pts[ccy] = (p_ask - p_bid) / scale / (2 * s_mid)
+
+    def _clean(d: dict) -> pd.DataFrame:
+        df = pd.DataFrame(d).clip(lower=0)
+        df = df.apply(lambda s: s.clip(upper=s.quantile(winsor_q)))
+        return df.ffill(limit=ffill_limit)
+
+    return _clean(hs_out), _clean(hs_pts)
+
+
+def roundtrip_cost(weights: pd.DataFrame, hs_outright: pd.DataFrame,
+                   hs_points: pd.DataFrame | None = None) -> pd.Series:
+    """Daily transaction-cost series (return units, >= 0) for a weight panel.
+
+    Charged on the days weights actually change (the rebalance effective day,
+    since monthly weights are forward-filled between rebalances):
+    - turnover leg: Σ |Δw| · hs_outright — changed notional crosses the full
+      outright-forward spread;
+    - roll leg (if hs_points given): Σ min(|w_old|, |w_new|) · hs_points —
+      maintained notional rolls its 1M forward via an FX swap and pays only
+      the points spread. Charging the outright on the full book instead would
+      roughly double costs (gross-2 book, 12 rolls/yr).
+    Spreads are forward-filled and gap-filled with the per-currency median so
+    a missing quote never silently zeroes a real cost.
+    """
+    w = weights.fillna(0.0)
+    common = w.columns.intersection(hs_outright.columns)
+    dropped = [c for c in w.columns if c not in common]
+    if dropped:
+        raise ValueError(f"No half-spread series for {dropped}")
+
+    def _prep(hs: pd.DataFrame) -> pd.DataFrame:
+        hs = hs[common].reindex(w.index).ffill()
+        return hs.fillna(hs.median())
+
+    dw = w[common].diff()
+    dw.iloc[0] = w[common].iloc[0]
+    cost = (dw.abs() * _prep(hs_outright)).sum(axis=1, min_count=1)
+    if hs_points is not None:
+        held = np.minimum(w[common].abs(), w[common].shift(1).abs().fillna(0.0))
+        rebal_day = dw.abs().sum(axis=1) > 0
+        roll = (held * _prep(hs_points)).sum(axis=1, min_count=1).where(rebal_day, 0.0)
+        cost = cost.add(roll, fill_value=0.0)
+    return cost.rename("tcost")
+
+
+def vol_surface_panel(kind: str = "ATM", tenor: str = "1M", delta: int = 25) -> pd.DataFrame:
+    """FX option vol-surface points per currency (vol points, columns = ccys).
+
+    kind="ATM" loads {pair}V{tenor}; kind="RR" the {pair}{delta}R{tenor} risk
+    reversal; kind="BF" the butterfly. Pair names follow market convention
+    (AUDUSD/EURUSD/GBPUSD/NZDUSD are FX-first, the rest USD-first). RR values
+    are sign-normalised to crash-positive: positive always means FX puts rich
+    vs USD (crash fear for a long-FX carry position), which requires flipping
+    the FX-first pairs. Coverage: all G10 pairs, 13 EM currencies (no
+    CLP/COP/IDR/MYR/PEN/PHP options were downloaded).
+    """
+    opts = pd.concat([load_wide("g10_fx_options"), load_wide("em_fx_options")], axis=1)
+    suffix = {"ATM": f"V{tenor}", "RR": f"{delta}R{tenor}", "BF": f"{delta}B{tenor}"}
+    if kind not in suffix:
+        raise ValueError(f"kind must be ATM/RR/BF, got {kind!r}")
+    out = {}
+    for ccy in ALL_CCY:
+        pair = f"{ccy}USD" if ccy in USD_PER_FX else f"USD{ccy}"
+        tk = f"{pair}{suffix[kind]}"
+        if tk not in opts.columns:
+            continue
+        s = opts[tk]
+        if kind == "RR" and ccy in USD_PER_FX:
+            s = -s  # FX-first pair: RR = FX-call minus FX-put -> flip to crash-positive
+        out[ccy] = s
+    return pd.DataFrame(out)
