@@ -143,6 +143,10 @@ def summary_stats(returns: pd.DataFrame, benchmark: pd.Series | None = None,
 
     VaR/CVaR are historical, reported as positive daily loss numbers.
     If `benchmark` is given, adds an information ratio vs that series.
+    cagr compounds daily values as simple returns (the max_drawdown wealth-curve
+    convention; log-vs-simple is second-order at these vol levels), sortino uses
+    the full-sample lower partial moment of order 2 vs a zero target, and
+    calmar = cagr / |max drawdown|.
     """
     rows = {}
     for col in returns.columns:
@@ -152,17 +156,23 @@ def summary_stats(returns: pd.DataFrame, benchmark: pd.Series | None = None,
         ann_mu = r.mean() * ANN_DAYS
         ann_sd = r.std() * np.sqrt(ANN_DAYS)
         q05, q01 = r.quantile(0.05), r.quantile(0.01)
+        mdd = max_drawdown(r)
+        cagr = (1 + r).prod() ** (ANN_DAYS / len(r)) - 1
+        downside = np.sqrt((r.clip(upper=0) ** 2).mean()) * np.sqrt(ANN_DAYS)
         row = {
             "start": r.index[0].date(), "end": r.index[-1].date(), "n_days": len(r),
             "ann_return": ann_mu, "ann_vol": ann_sd, "daily_variance": r.var(),
             "skew": r.skew(), "excess_kurtosis": r.kurt(),
             "sharpe": ann_mu / ann_sd if ann_sd > 0 else np.nan,
-            "max_drawdown": max_drawdown(r),
+            "max_drawdown": mdd,
             "VaR_95": -q05, "VaR_99": -q01,
             "CVaR_95": -r[r <= q05].mean(), "CVaR_99": -r[r <= q01].mean(),
             "hit_rate": (r > 0).mean(),
             "best_day": r.max(), "worst_day": r.min(),
             "autocorr_1d": r.autocorr(1),
+            "cagr": cagr,
+            "sortino": ann_mu / downside if downside > 0 else np.nan,
+            "calmar": cagr / abs(mdd) if mdd != 0 else np.nan,
         }
         if benchmark is not None:
             active = (returns[col] - benchmark).dropna()
@@ -170,6 +180,25 @@ def summary_stats(returns: pd.DataFrame, benchmark: pd.Series | None = None,
             row["info_ratio"] = active.mean() * ANN_DAYS / te if te > 0 else np.nan
         rows[col] = row
     return pd.DataFrame(rows).T
+
+
+def turnover(weights: pd.DataFrame, rebal: str = "ME") -> float:
+    """Average one-sided turnover per rebalance period: mean over live periods of Σ|Δw|/2.
+
+    Daily absolute weight changes are summed within each `rebal` period and
+    halved (one-sided convention: fully liquidating and rebuilding a gross-2
+    book counts as 2.0, i.e. buys only). The average runs from the first
+    period with any live weight so pre-inception zeros don't dilute it; the
+    inception trade itself is excluded (the first diff is NaN). Weights are
+    expected daily and forward-filled, the `carry_portfolio` /
+    `vol_target_weights` output convention.
+    """
+    w = weights.fillna(0.0)
+    daily_to = w.diff().abs().sum(axis=1)
+    per_period = daily_to.resample(rebal).sum() / 2
+    live = w.abs().sum(axis=1).resample(rebal).sum() > 0
+    live_periods = per_period[live.cummax()]
+    return float(live_periods.mean()) if len(live_periods) else np.nan
 
 
 # ---------------------------------------------------------------------------
@@ -402,6 +431,41 @@ def vol_target_weights(weights: pd.DataFrame, xret: pd.DataFrame, target: float 
     scalar_rb = scalar.resample(rebal).last()
     daily = scalar_rb.reindex(weights.index, method="ffill").shift(1)
     return weights.mul(daily, axis=0)
+
+
+def exposure_scalar(indicator: pd.Series, lookback: int = 756, q: float = 0.80,
+                    low_mult: float = 0.5, rebal: str = "ME",
+                    method: str = "binary") -> pd.Series:
+    """Daily de-risking multiplier from a trailing-percentile threshold on a risk indicator.
+
+    Generalises the crash hedge to any conditioning series (VIX, aggregate IV,
+    risk reversals, EMBI): the indicator's trailing `lookback`-day percentile
+    rank (756d ≈ 3y; min_periods = lookback // 2, the library's window // 2
+    convention) is sampled at `rebal` dates, mapped to a multiplier, then
+    forward-filled and shifted one day — effective the next trading day, no
+    lookahead. Note the quantile uses ~756 daily observations, not the 36
+    month-end points of the original ad-hoc notebook hedge.
+    - method="binary": 1.0 while the rank is at or below `q`, `low_mult` above
+      it (halve exposure in the top quintile at the defaults).
+    - method="linear": ramp from 1.0 at rank `q` down to `low_mult` at rank
+      1.0, identical to binary below `q` — the flagged continuous refinement.
+    Missing indicator values and the burn-in period map to 1.0 (no signal →
+    fully invested), so the returned daily Series is NaN-free in
+    [low_mult, 1.0] and can never null out valid weights. Apply it as
+    w.mul(s.reindex(w.index, method="ffill").fillna(1.0), axis=0).
+    """
+    if method not in ("binary", "linear"):
+        raise ValueError(f"method must be 'binary' or 'linear', got {method!r}")
+    pct = indicator.rolling(lookback, min_periods=lookback // 2).rank(pct=True)
+    me = pct.resample(rebal).last()
+    if method == "binary":
+        s_me = pd.Series(np.where(me > q, low_mult, 1.0), index=me.index)
+    else:
+        ramp = ((me - q) / (1.0 - q)).clip(0.0, 1.0)
+        s_me = (1.0 - (1.0 - low_mult) * ramp).fillna(1.0)
+    daily = s_me.reindex(indicator.index, method="ffill").shift(1).fillna(1.0)
+    daily.name = indicator.name
+    return daily
 
 
 def portfolio_returns(weights: pd.DataFrame, xret: pd.DataFrame,

@@ -23,7 +23,7 @@ Mapped to the proposal's three implementation goals:
 
 1. Collect Bloomberg time series — ✅ done (§5).
 2. Build reusable portfolio / return / risk libraries — ✅ done (`cesare/fx_utils.py`, §5.3).
-3. Explore strategy behaviour across market environments — 🔶 in progress (Stages 3–6).
+3. Explore strategy behaviour across market environments — 🔶 in progress (Stage 3 ✅; Stages 4–6 remain).
 
 ## 2. Research Question
 
@@ -82,10 +82,12 @@ Key findings so far:
 4. **The strategy is levered HML, not a new signal.** Against DOL + HML_FX the combined track is
    ≈1.4× HML (R² 0.69) with ~2%/yr alpha (t ≈ 1.6, not significant) — the value added is risk
    management, as expected for a carry sort.
-5. **The simple crash hedge is tail insurance, not a Sharpe improver.** Halving exposure above the
-   trailing 80th percentile of implied vol / risk reversals cuts G10 CVaR₉₉ from 3.2% to 2.8% and
-   improves skew (−0.95 → −0.67), but costs Sharpe (combined 0.63 → 0.53). Refinement is Stage 3/6
-   work.
+5. **Crash hedging is tail insurance, not a Sharpe improver — and the implementation decides
+   whether it is worth having.** Stage 3 (net of costs, `stage3_dynamic_comparison.csv`): no
+   exposure-timing rule has significant alpha on its baseline (all |t| < 1.7); the book-level
+   binary IV/RR hedge is *rejected* for the combined book net of costs (Sharpe 0.47 → 0.37 with
+   a worse MaxDD), while per-currency RR conditioning delivers the tail improvement
+   (skew −0.65 → −0.60, CVaR₉₉ 2.9% → 2.7%) at ~zero Sharpe cost. Details in §9.
 
 Stage dashboard:
 
@@ -94,12 +96,12 @@ Stage dashboard:
 | 0. Data & infrastructure | ✅ | `src/`, `data/raw/`, `cesare/fx_utils.py` | 13 parquet groups, ticker manifest |
 | 1. Baseline carry | ✅ | `cesare/strategy_backtest.ipynb` §1–2, §4 | `strategy_summary_stats.csv`, weights CSVs |
 | 2. Return drivers | ✅ | `cesare/data_visualization.ipynb` §5, §7–8; backtest §3, §5 | `regression_lrv.csv`, `regression_macro.csv`, `uip_fama.csv`, `crash_regressions.csv` |
-| 3. Dynamic carry | 🔶 | backtest §5 (hedge only) | `crash_regressions.csv` |
+| 3. Dynamic carry | ✅ | `cesare/dynamic_carry.ipynb`; `fx_utils.exposure_scalar` | `stage3_dynamic_comparison.csv` |
 | 4. Portfolio construction comparison | ⬜ | — | — |
 | 5. Momentum overlay | ⬜ | — | — |
 | 6. Regime analysis | ⬜ | — | — |
 | 7. ML extension (optional) | ⬜ | — | — |
-| Final evaluation & report | 🔶 | metrics partial in `fx_utils.summary_stats` | — |
+| Final evaluation & report | 🔶 | §14.1 metrics ✅ done; report not started | regenerated stats CSVs |
 
 ## 5. Data & Infrastructure — Stage 0 ✅
 
@@ -145,10 +147,10 @@ done and documented here because every later stage depends on these conventions.
 |---|---|
 | Loading | `load_wide`, `load_rates_panel`, `load_benchmarks`, `benchmark_returns`, `load_em_risk` |
 | Panel construction | `spots_usd_per_fx`, `carry_panel`, `excess_returns`, `spot_log_returns` |
-| Performance stats | `summary_stats`, `max_drawdown` |
+| Performance stats | `summary_stats`, `max_drawdown`, `turnover` |
 | Factors & regressions | `dollar_factor`, `carry_hml_factor`, `nw_regression`, `regression_table` |
 | CIP / rates | `onshore_rate`, `interest_diff_vs_usd`, `cip_basis` |
-| Portfolio construction | `carry_portfolio`, `vol_target_weights`, `portfolio_returns` |
+| Portfolio construction | `carry_portfolio`, `vol_target_weights`, `exposure_scalar`, `portfolio_returns` |
 | Transaction costs | `forward_halfspreads`, `roundtrip_cost` |
 | Options | `vol_surface_panel` |
 
@@ -248,43 +250,47 @@ descoped (see Gaps).
    variable for Stage 6.
 2. Add a momentum-factor row to the backtest §3 regressions once Stage 5 exists.
 
-## 9. Stage 3 — Dynamic Carry & Risk Management 🔶
+## 9. Stage 3 — Dynamic Carry & Risk Management ✅
 
-**Status:** partial. Vol targeting and one threshold hedge exist; the stage's core deliverable —
-an explicit static vs vol-targeted vs risk-managed comparison — does not.
+**Status:** done. The static vs vol-targeted vs risk-managed comparison exists, every variant
+gross AND net, with NW tests and an explicit verdict per rule
+(`cesare/dynamic_carry.ipynb` → `outputs/stage3_dynamic_comparison.csv`).
 
 **What exists**
 
-- `vol_target_weights` (10% target, 60d window, monthly, 4× cap, 1% vol floor, next-day
-  effective).
-- **Threshold hedge** (backtest §5): halve next month's exposure when month-end aggregate 1M ATM
-  IV *or* 25Δ RR exceeds its trailing 36-month 80th percentile. Result: tail insurance
-  (G10 CVaR₉₉ 3.2% → 2.8%, skew −0.95 → −0.67) but Sharpe cost (combined 0.63 → 0.53).
+- **`fx_utils.exposure_scalar(indicator, lookback=756, q=0.80, low_mult=0.5, rebal="ME",
+  method="binary")`** — trailing-percentile de-risking multiplier for any conditioning series
+  (VIX, IV, RR, EMBI); binary threshold plus the `method="linear"` ramp refinement; daily,
+  `ffill().shift(1)`, NaN-free (missing signal → fully invested). Replaces the ad-hoc backtest
+  §5 `hedge_scalar` — 0.97 monthly decision agreement, hedged-track correlation 0.99 (the
+  windowing changed from 36 month-end points to a 756-day daily rank).
+- **`cesare/dynamic_carry.ipynb`**: variants {static unit-gross, vol-targeted, VIX-threshold,
+  IV/RR-threshold, IV/RR linear, per-currency RR} × {gross, net} × {G10, combined}, common
+  window. Hedges scale **weights**, not returns, so `roundtrip_cost` prices the reduced
+  notional and the toggle trades — this is what makes the net-of-cost hedged tracks possible.
+- **In-notebook validation:** no-lookahead truncation test; weights-level ≡ return-level
+  machinery check (<1e-12); ≤2 trade-days/month cost-alignment assertion; cost drags reproduce
+  the §4 headline values (0.6%/1.8%/yr).
+- §14.1 (metrics + `turnover`) was completed first as this stage's prerequisite.
 
-**Gaps vs original plan**
+**Results** (net of costs, common window; alpha/t vs the same-cost-basis baseline):
 
-- No **Static / Vol-Targeted / Risk-Managed comparison table** — the stage's stated output.
-- No **VIX-conditioned rule** tested (the original's headline example); VIX is in `global_risk`.
-- Hedged tracks are **gross only** — no net-of-cost hedged variant.
-- The static (un-vol-targeted, unit-gross) track is never reported as a named row.
-- Hedge logic lives ad-hoc in the notebook, not in `fx_utils`.
+| Rule | G10 | Combined | Verdict |
+|---|---|---|---|
+| Vol targeting (vs static) | t = −0.29 | t = +0.51 | adopt as sizing standard — no alpha claim |
+| VIX threshold | t = −1.15; CVaR₉₉ 3.2→2.7% | t = −0.27; MaxDD −29→−25% | tail-insurance-only |
+| IV/RR binary (old §5 rule) | t = −0.56; MaxDD −38→−31% | **t = −1.69; Sharpe 0.47→0.37, MaxDD −29→−31%** | G10 tail-insurance-only; **combined reject** |
+| IV/RR linear | t = −0.24, mild tail gain | t = −0.41, no tail gain | dominated — reject |
+| Per-currency RR (longs only) | t = 0.01; MaxDD −38→−34% | t = −0.04; skew −0.65→−0.60, CVaR₉₉ 2.9→2.7% | tail-insurance-only — **preferred** |
 
-**Next actions**
-
-1. Promote the hedge logic into `fx_utils`:
-   `exposure_scalar(indicator, lookback=756, q=0.80, low_mult=0.5, rebal="ME", method="binary")`
-   — trailing-quantile threshold sampled at rebalance dates, `ffill().shift(1)`; generalizes to
-   any conditioning series (VIX, IV, RR, EMBI). Add `method="linear"` (scale continuously in the
-   trailing percentile) as the flagged refinement.
-2. New backtest section (or `cesare/dynamic_carry.ipynb`): comparison rows =
-   {static unit-gross, vol-targeted, VIX-threshold, IV/RR-threshold} × {gross, net}.
-3. Test **per-currency RR conditioning** (scale individual weights, not the whole book).
-4. Build the **net-of-cost hedged track** (§4 × §5 combination flagged in the notebook takeaways).
-
-- **Outputs:** `outputs/stage3_dynamic_comparison.csv` (all variants, full metrics + benchmark IR).
-- **Acceptance criteria:** all four variants gross+net on the common window; NW t-stat on the
-  dynamic-minus-static difference (or alpha of dynamic on static); an explicit written verdict per
-  rule — adopt / tail-insurance-only / reject.
+Headline: **no exposure-timing rule adds significant net alpha** (all |t| < 1.7) — consistent
+with carry compensating priced crash risk: de-risking on elevated risk indicators sells premium
+roughly one-for-one. Refinement still matters: the original book-level binary hedge *fails net
+of costs* on the combined book, while per-currency RR conditioning buys the tail improvement
+for ~1 Sharpe point. Caveat: the per-currency rule breaks dollar-neutrality by design (mean net
+FX exposure −0.10, ≈−1.1 in 2008 stress) — the long-USD tilt in crises *is* the hedge, reported
+as an exposure. **Stage-6 bar: a regime rule must beat per-currency RR (combined net Sharpe
+0.457, MaxDD −28%) and the VIX threshold (0.441, −25%) — not the old binary hedge.**
 
 ## 10. Stage 4 — Portfolio Construction Comparison ⬜
 
@@ -345,14 +351,15 @@ Momentum in Currency Markets*) is in `papers/`.
 - **Outputs:** `outputs/stage5_momentum_comparison.csv` (pure carry vs pure momentum vs filter vs
   blend, per lookback, gross+net); correlation matrix of tracks.
 - **Acceptance criteria:** the plan's own test, made falsifiable — does the momentum filter reduce
-  MaxDD / CVaR₉₉ at **less** Sharpe cost than the Stage-3 hedge did (0.63 → 0.53)? Report
+  MaxDD / CVaR₉₉ at **less** Sharpe cost than the Stage-3 hedges did (best case per-currency RR:
+  combined net 0.466 → 0.457 with skew −0.65 → −0.60 — see §9)? Report
   gross+net; state which lookback wins and whether the result is robust across the grid (guard
   against lookback-mining).
 
 ## 12. Stage 6 — Market Regime Analysis ⬜
 
-**Status:** not started. The Stage-3 single-threshold hedge is the only regime-like logic; this
-stage generalizes and, if successful, supersedes it.
+**Status:** not started. Stage 3's `exposure_scalar` threshold rules are the existing
+regime-like logic; this stage generalizes them and, if successful, supersedes them.
 
 **Next actions**
 
@@ -369,13 +376,15 @@ stage generalizes and, if successful, supersedes it.
 4. **Analyses:** (a) conditional performance of every existing track by regime, with observation
    counts (expected: carry earned in Low, crashes in Crisis — verify); (b) regime-aware
    allocation — exposure multipliers {Low: 1.0, Moderate: 1.0, Crisis: 0.5 or 0.0} — compared
-   head-to-head vs the Stage-3 binary hedge and vs static, gross+net.
+   head-to-head vs the best Stage-3 rules (per-currency RR, VIX threshold) and vs static,
+   gross+net.
 
 - **Outputs:** `outputs/regime_series.csv`, `outputs/stage6_regime_stats.csv`, regime-shaded
   cumulative-return plot.
 - **Acceptance criteria:** regime series reproducible from the stated rules alone; conditional
-  table includes n_days per regime; net comparison (regime-aware vs Stage-3 hedge vs static) with
-  an explicit adopt/reject verdict — the regime rule must beat the binary hedge to justify itself.
+  table includes n_days per regime; net comparison (regime-aware vs best Stage-3 rules vs static)
+  with an explicit adopt/reject verdict — per §9, the bar is per-currency RR (combined net Sharpe
+  0.457, MaxDD −28%) and the VIX threshold (0.441, −25%), not the rejected binary hedge.
 
 ## 13. Stage 7 — Machine Learning Extension (Optional) ⬜
 
@@ -409,13 +418,16 @@ scheme — for ~230 monthly observations that silence is a lookahead trap (Appen
 
 ## 14. Final Evaluation, Report & Repo Hygiene 🔶
 
-### 14.1 Metric library completion (do first — everything downstream consumes it)
+### 14.1 Metric library completion ✅ (done with Stage 3)
 
-- Extend `fx_utils.summary_stats` in place (backward-compatible new columns): `cagr` (geometric),
-  `sortino` (annualized, downside deviation vs 0), `calmar` (CAGR / |MaxDD|).
-- New `turnover(weights, rebal="ME")` — average monthly one-sided turnover Σ|Δw|/2; state the
-  convention explicitly.
-- Regenerate `strategy_summary_stats.csv` and the other stats CSVs afterwards.
+- `fx_utils.summary_stats` extended in place (backward-compatible — columns appended before
+  `info_ratio`, old values verified unchanged against git): `cagr` (geometric, compounding daily
+  values as simple returns, the `max_drawdown` wealth-curve convention), `sortino` (annualized
+  mean over the lower partial moment of order 2 vs 0), `calmar` (CAGR / |MaxDD|).
+- New `turnover(weights, rebal="ME")` — average one-sided turnover per rebalance period,
+  Σ|Δw|/2 over live periods; inception trade excluded (convention in the docstring).
+- `strategy_summary_stats.csv`, `summary_stats_carry_excess.csv`, `summary_stats_spot.csv`
+  regenerated (both notebooks re-executed).
 
 ### 14.2 Consolidated comparison table
 
@@ -449,9 +461,9 @@ Funding audience.
 
 | # | Work item | Depends on | Effort | Why here |
 |---|---|---|---|---|
-| 1 | §14.1 metrics + regenerate CSVs | — | 0.5 d | Every later comparison consumes these |
+| 1 | §14.1 metrics + regenerate CSVs ✅ | — | 0.5 d | Every later comparison consumes these |
 | 2 | §14.4 hygiene (README, requirements) | — | 0.5 d | Cheap; makes the repo presentable now |
-| 3 | Stage 3 completion | 1 | 1 d | Mostly assembles existing pieces; closes the first 🔶 |
+| 3 | Stage 3 completion ✅ | 1 | 1 d | Mostly assembles existing pieces; closes the first 🔶 |
 | 4 | Stage 5 momentum | 1 | 1.5 d | Feeds Stage 6 conditional stats and Stage 7 features |
 | 5 | Stage 4 weighting comparison | 1 | 1.5–2 d | Independent — parallelizable with #4 |
 | 6 | Stage 6 regimes | 3, 4 | 1.5 d | Generalizes the Stage-3 threshold rule |
@@ -493,8 +505,9 @@ regime-aware exposure management.
 | `crash_regressions.csv` | backtest §5 | ΔIV/ΔRR/ΔEMBI loadings per track |
 | `weights_g10_monthly.csv` | backtest §6 | month-end weights, G10 track |
 | `weights_combined_monthly.csv` | backtest §6 | month-end weights, combined track |
+| `stage3_dynamic_comparison.csv` | dynamic_carry §6 | all Stage-3 variants × gross/net: full metrics, IR, turnover, cost drag, NW alpha vs baseline |
 
-**Planned:** `stage3_dynamic_comparison.csv` (§9) · `stage4_weighting_comparison.csv` +
+**Planned:** `stage4_weighting_comparison.csv` +
 `weights_{scheme}_monthly.csv` (§10) · `stage5_momentum_comparison.csv` (§11) ·
 `regime_series.csv` + `stage6_regime_stats.csv` (§12) · `stage7_ml_forecast_eval.csv` +
 `stage7_ml_strategy_stats.csv` (§13) · `final_comparison.csv` (§14.2).
