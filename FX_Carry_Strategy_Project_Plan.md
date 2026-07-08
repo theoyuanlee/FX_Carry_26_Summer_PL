@@ -541,3 +541,6 @@ regime-aware exposure management.
 11. **Narrative correction.** The original implicitly assumes carry works in the majors; over
     2007–2026 the premium is EM (combined 7.0%/yr Sharpe 0.63 vs G10 1.9%/yr 0.17; DBHVG10U
     negative over the sample). The executive summary leads with this finding.
+
+
+push
