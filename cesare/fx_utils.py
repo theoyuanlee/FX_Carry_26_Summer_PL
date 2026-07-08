@@ -127,6 +127,24 @@ def spot_log_returns(spots_usd: pd.DataFrame) -> pd.DataFrame:
     return np.log(spots_usd).diff()
 
 
+def momentum_panel(xret: pd.DataFrame, lookback: int = 63, skip: int = 0) -> pd.DataFrame:
+    """Trailing cumulative excess-return momentum signal, one column per currency.
+
+    The signal at each day is the sum of the last `lookback` daily excess returns
+    (spot move plus accrued carry, `excess_returns` convention) — not spot-only,
+    since the carry accrual is part of what a trend follower actually realises.
+    `lookback` in {21, 63, 252} spans the 1/3/12-month horizons of Burnside et al.
+    (2011) and Menkhoff et al. (2012b); `skip` (default 0) drops the most recent
+    `skip` days for the equity-style 12-2 gap, kept only for robustness checks as
+    the FX momentum literature does not use it. Returned as a daily panel, no
+    lookahead by construction (only past returns enter the trailing sum); it is
+    consumed exactly like `carry_panel` — `carry_portfolio` samples it month-end
+    and shifts one day, so the effective signal never sees its own or future days.
+    """
+    mom = xret.rolling(lookback, min_periods=lookback // 2).sum()
+    return mom.shift(skip) if skip else mom
+
+
 # ---------------------------------------------------------------------------
 # Performance statistics
 # ---------------------------------------------------------------------------
@@ -208,6 +226,18 @@ def turnover(weights: pd.DataFrame, rebal: str = "ME") -> float:
 def dollar_factor(xret: pd.DataFrame) -> pd.Series:
     """DOL: equal-weighted long-all-currencies-vs-USD excess return (LRV)."""
     return xret.mean(axis=1).rename("DOL")
+
+
+def zscore_xs(panel: pd.DataFrame) -> pd.DataFrame:
+    """Cross-sectional z-score of a signal panel, standardised per date.
+
+    Each row (date) is demeaned and divided by its own cross-sectional standard
+    deviation across currencies, so signals on different natural scales — e.g.
+    annualised carry vs cumulative-return momentum — become comparable before
+    they are blended. Row-wise and stateless, so it introduces no lookahead; the
+    downstream `carry_portfolio` still samples month-end and shifts one day.
+    """
+    return panel.sub(panel.mean(axis=1), axis=0).div(panel.std(axis=1), axis=0)
 
 
 def carry_hml_factor(xret: pd.DataFrame, carry_ann: pd.DataFrame) -> pd.Series:
@@ -366,7 +396,8 @@ def load_em_risk() -> pd.Series:
 def carry_portfolio(carry_ann: pd.DataFrame, xret: pd.DataFrame, n_buckets: int = 3,
                     rebal: str = "ME", vol_window: int = 60, min_per_leg: int = 2,
                     universe: list[str] | None = None,
-                    max_leg_share: float = 0.40) -> pd.DataFrame:
+                    max_leg_share: float = 0.40,
+                    filter_signal: pd.DataFrame | None = None) -> pd.DataFrame:
     """Daily weight panel of an inverse-vol long/short carry sort.
 
     On each rebalance date (last observation per `rebal` period) currencies are
@@ -380,6 +411,15 @@ def carry_portfolio(carry_ann: pd.DataFrame, xret: pd.DataFrame, n_buckets: int 
     from the next trading day, mirroring carry_hml_factor (no lookahead).
     Note: signals are per-column last observations of the period, so a gappy
     currency can contribute a slightly stale (intra-month) carry reading.
+
+    `filter_signal` (optional, same panel shape) applies a directional double
+    sort after bucketing: long-leg names are kept only where filter_signal >= 0
+    and short-leg names only where filter_signal <= 0, then each leg is
+    re-normalised over its survivors (the max_leg_share cap still binds). This
+    is the momentum-filter overlay (long high-carry that is also trending up,
+    short low-carry that is also trending down); a leg with no survivors that
+    period is simply left flat. filter_signal is sampled month-end and enters at
+    t-1 like the carry signal, so the overlay adds no lookahead.
     """
     cols = carry_ann.columns.intersection(xret.columns)
     if universe is not None:
@@ -387,6 +427,7 @@ def carry_portfolio(carry_ann: pd.DataFrame, xret: pd.DataFrame, n_buckets: int 
     signal = carry_ann[cols].resample(rebal).last()
     vol = xret[cols].rolling(vol_window, min_periods=vol_window // 2).std()
     vol_rb = vol.resample(rebal).last()
+    filt = filter_signal[cols].resample(rebal).last() if filter_signal is not None else None
 
     rows = {}
     for dt in signal.index:
@@ -397,8 +438,14 @@ def carry_portfolio(carry_ann: pd.DataFrame, xret: pd.DataFrame, n_buckets: int 
         if k < min_per_leg:
             continue
         w = pd.Series(0.0, index=cols)
+        f = filt.loc[dt] if filt is not None else None
         for names, sign in ((valid["carry"].nlargest(k).index, 1.0),
                             (valid["carry"].nsmallest(k).index, -1.0)):
+            if f is not None:
+                fn = f.reindex(names)
+                names = names[(fn >= 0).values] if sign > 0 else names[(fn <= 0).values]
+                if len(names) == 0:
+                    continue
             leg = (1.0 / valid.loc[names, "vol"])
             leg /= leg.sum()
             for _ in range(10):

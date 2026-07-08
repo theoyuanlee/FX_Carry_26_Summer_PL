@@ -98,7 +98,7 @@ Stage dashboard:
 | 2. Return drivers | ✅ | `cesare/data_visualization.ipynb` §5, §7–8; backtest §3, §5 | `regression_lrv.csv`, `regression_macro.csv`, `uip_fama.csv`, `crash_regressions.csv` |
 | 3. Dynamic carry | ✅ | `cesare/dynamic_carry.ipynb`; `fx_utils.exposure_scalar` | `stage3_dynamic_comparison.csv` |
 | 4. Portfolio construction comparison | ⬜ | — | — |
-| 5. Momentum overlay | ⬜ | — | — |
+| 5. Momentum overlay | ✅ | `cesare/momentum_overlay.ipynb`; `fx_utils.momentum_panel`, `zscore_xs`, `carry_portfolio(filter_signal=)`; backtest §3 MOM factor | `stage5_momentum_comparison.csv`, `stage5_track_correlation.csv` |
 | 6. Regime analysis | ⬜ | — | — |
 | 7. ML extension (optional) | ⬜ | — | — |
 | Final evaluation & report | 🔶 | §14.1 metrics ✅ done; report not started | regenerated stats CSVs |
@@ -248,7 +248,8 @@ descoped (see Gaps).
 
 1. Add a carry-dispersion series (cross-sectional std of `carry_panel` at month-end) as a timing
    variable for Stage 6.
-2. Add a momentum-factor row to the backtest §3 regressions once Stage 5 exists.
+2. Add a momentum-factor row to the backtest §3 regressions once Stage 5 exists. ✅ done — backtest
+   §3 now regresses each track on DOL + HML_FX + MOM (combined loads +0.16 on MOM, t 6.1; see §11).
 
 ## 9. Stage 3 — Dynamic Carry & Risk Management ✅
 
@@ -326,35 +327,57 @@ plan's "mean-variance" and "maximum Sharpe" collapse into one scheme (Appendix C
   conclusion on whether optimization beats inverse-vol **net of costs** (honest prior: modestly at
   best).
 
-## 11. Stage 5 — Momentum Overlay ⬜
+## 11. Stage 5 — Momentum Overlay ✅
 
-**Status:** not started; the reference paper (Burnside–Eichenbaum–Rebelo, *Carry Trade and
-Momentum in Currency Markets*) is in `papers/`.
+**Status:** done. Signal helpers, the three combination methods, the momentum factor row in the
+backtest §3 regressions, and a falsifiable verdict all exist
+(`cesare/momentum_overlay.ipynb` → `outputs/stage5_momentum_comparison.csv` +
+`outputs/stage5_track_correlation.csv`). Reference: Burnside–Eichenbaum–Rebelo (2011) and
+Menkhoff et al. (2012b), in `papers/`.
 
-**Next actions**
+**What exists**
 
-1. Signal helper: `momentum_panel(xret, lookback=63, skip=0)` — trailing cumulative **excess**
-   return (not spot-only: the carry accrual is part of what a trend follower realizes). Lookback
-   grid **21 / 63 / 252 days** (1/3/12M) per Burnside et al. (2011) and Menkhoff et al. (2012b);
-   `skip=0` default — the FX momentum literature does not use the equity 12-2 skip (parameter kept
-   for robustness checks).
-2. Three combination methods, all reusing `carry_portfolio` (it accepts any signal panel):
-   - **(a) Standalone momentum sort** — establishes the diversification premise; measure the
-     carry–momentum track correlation (literature: low/negative).
-   - **(b) Double-sort filter** (the original plan's rule): long = high carry ∩ momentum ≥ 0;
-     short = low carry ∩ momentum ≤ 0. Thin wrapper `filtered_carry_portfolio(carry_ann, mom,
-     xret, **kwargs)` (or a `filter_signal=` kwarg) since it changes bucket membership.
-   - **(c) Blend:** `zscore_xs(panel)`; combined signal = 0.5·z(carry) + 0.5·z(momentum), fed
-     straight into `carry_portfolio`.
-3. Add the momentum factor to the Stage-2 track regressions (§8 cross-reference).
+- **`fx_utils.momentum_panel(xret, lookback=63, skip=0)`** — trailing cumulative **excess**
+  return (rolling sum of `xret`, `min_periods=lookback//2`), a daily panel consumed exactly like
+  `carry_panel` (month-end sample + `shift(1)` inside `carry_portfolio`; no lookahead by
+  construction). Grid **21 / 63 / 252 d**; `skip=0` default.
+- **`fx_utils.zscore_xs(panel)`** — per-date cross-sectional z-score, for the blend.
+- **`filter_signal=` kwarg on `carry_portfolio`** (chosen over a separate wrapper — backward
+  compatible, zero logic duplication): after bucketing, keeps long names with `filter_signal ≥ 0`
+  and short names with `≤ 0`, re-normalising each leg over survivors (cap still binds); an empty
+  leg is left flat. Stage-3 behaviour unchanged (default `None`).
+- **`cesare/momentum_overlay.ipynb`**: {pure carry, (a) pure momentum, (b) double-sort filter,
+  (c) 50/50 z-blend} × {21/63/252 where applicable} × {G10 tercile, ALL quintile} × {gross, net},
+  all vol-targeted (10%/60d), common window 2007-05→2026-06, IR vs DBHVG10U/FXCTEM8, NW alpha vs
+  the same-basis pure-carry baseline. In-notebook guards: `momentum_panel` no-lookahead truncation
+  test; **exact** reconciliation that vol-targeted pure carry = Stage-3 `voltgt`
+  (G10 0.119, ALL 0.466 net Sharpe, Δ = 0.000).
+- **Backtest §3** now regresses each track on DOL + HML_FX + **MOM** (momentum HML from
+  `carry_hml_factor(xret, momentum_panel(xret,63))`); the shared DOL+HML `factors` used by §5 are
+  left untouched.
 
-- **Outputs:** `outputs/stage5_momentum_comparison.csv` (pure carry vs pure momentum vs filter vs
-  blend, per lookback, gross+net); correlation matrix of tracks.
-- **Acceptance criteria:** the plan's own test, made falsifiable — does the momentum filter reduce
-  MaxDD / CVaR₉₉ at **less** Sharpe cost than the Stage-3 hedges did (best case per-currency RR:
-  combined net 0.466 → 0.457 with skew −0.65 → −0.60 — see §9)? Report
-  gross+net; state which lookback wins and whether the result is robust across the grid (guard
-  against lookback-mining).
+**Results** (net of costs, common window):
+
+| Family | ALL net Sharpe (best L) | ALL MaxDD | vs pure carry (0.466 / −29%) |
+|---|---|---|---|
+| pure carry (baseline) | 0.466 | −29% | — |
+| (a) pure momentum | −0.02 to −0.33 | −52 to −73% | net loser; low carry corr (−0.07..+0.14), flips skew +, trims CVaR₉₉ |
+| (b) double-sort filter | 0.37 (63d) | −51% (63d) | **dominated** — less Sharpe *and* worse tail |
+| (c) 50/50 blend | 0.16 (252d) | −49% | dominated — worse Sharpe and MaxDD |
+
+Track regressions: combined track loads +0.16 on MOM (t 6.1, significant) with HML loading and
+alpha unchanged; G10 +0.07 (t 1.7, marginal) — carry and momentum are near-orthogonal.
+
+- **Outputs:** `outputs/stage5_momentum_comparison.csv` (42 rows: pure carry vs momentum vs filter
+  vs blend, per lookback, gross+net + benchmarks) and `outputs/stage5_track_correlation.csv`.
+- **Verdict — NO.** Momentum does **not** reduce MaxDD/CVaR₉₉ at less Sharpe cost than the Stage-3
+  hedges — the filter and blend give up 0.1–0.5 Sharpe *and worsen* the drawdown (filtering thins
+  each leg and vol-targeting then levers the concentrated book). Standalone momentum diversifies
+  (near-zero carry correlation, positive skew, lower CVaR₉₉) but is a net money loser, so it is not
+  investable on its own here. The one apparent win (G10 blend @ 252d) is single-cell — only 252d,
+  only G10, gone in the combined book — classic lookback-mining, **not adopted**. Per-currency RR
+  (0.466 → 0.457, MaxDD −28%, skew −0.60) remains the preferred near-free tail hedge; momentum is
+  carried forward only as a regression **factor**, not an allocation.
 
 ## 12. Stage 6 — Market Regime Analysis ⬜
 
@@ -464,7 +487,7 @@ Funding audience.
 | 1 | §14.1 metrics + regenerate CSVs ✅ | — | 0.5 d | Every later comparison consumes these |
 | 2 | §14.4 hygiene (README, requirements) | — | 0.5 d | Cheap; makes the repo presentable now |
 | 3 | Stage 3 completion ✅ | 1 | 1 d | Mostly assembles existing pieces; closes the first 🔶 |
-| 4 | Stage 5 momentum | 1 | 1.5 d | Feeds Stage 6 conditional stats and Stage 7 features |
+| 4 | Stage 5 momentum ✅ | 1 | 1.5 d | Feeds Stage 6 conditional stats and Stage 7 features |
 | 5 | Stage 4 weighting comparison | 1 | 1.5–2 d | Independent — parallelizable with #4 |
 | 6 | Stage 6 regimes | 3, 4 | 1.5 d | Generalizes the Stage-3 threshold rule |
 | 7 | Stage 7 ML (optional) | 4, 5, 6 | 2–3 d | Last; explicitly droppable |
@@ -506,9 +529,11 @@ regime-aware exposure management.
 | `weights_g10_monthly.csv` | backtest §6 | month-end weights, G10 track |
 | `weights_combined_monthly.csv` | backtest §6 | month-end weights, combined track |
 | `stage3_dynamic_comparison.csv` | dynamic_carry §6 | all Stage-3 variants × gross/net: full metrics, IR, turnover, cost drag, NW alpha vs baseline |
+| `stage5_momentum_comparison.csv` | momentum_overlay §5 | pure carry vs momentum vs filter vs blend, per lookback (21/63/252) × G10/ALL × gross/net: full metrics, IR, turnover, cost drag, NW alpha vs carry |
+| `stage5_track_correlation.csv` | momentum_overlay §4 | correlation matrix of the net daily tracks (carry↔momentum diversification) |
 
 **Planned:** `stage4_weighting_comparison.csv` +
-`weights_{scheme}_monthly.csv` (§10) · `stage5_momentum_comparison.csv` (§11) ·
+`weights_{scheme}_monthly.csv` (§10) ·
 `regime_series.csv` + `stage6_regime_stats.csv` (§12) · `stage7_ml_forecast_eval.csv` +
 `stage7_ml_strategy_stats.csv` (§13) · `final_comparison.csv` (§14.2).
 
