@@ -97,7 +97,7 @@ Stage dashboard:
 | 1. Baseline carry | ✅ | `cesare/strategy_backtest.ipynb` §1–2, §4 | `strategy_summary_stats.csv`, weights CSVs |
 | 2. Return drivers | ✅ | `cesare/data_visualization.ipynb` §5, §7–8; backtest §3, §5 | `regression_lrv.csv`, `regression_macro.csv`, `uip_fama.csv`, `crash_regressions.csv` |
 | 3. Dynamic carry | ✅ | `cesare/dynamic_carry.ipynb`; `fx_utils.exposure_scalar` | `stage3_dynamic_comparison.csv` |
-| 4. Portfolio construction comparison | ⬜ | — | — |
+| 4. Portfolio construction comparison | ✅ | `cesare/portfolio_construction.ipynb`; `fx_utils.shrunk_cov`, `erc_weights`, `mvo_weights`, `carry_portfolio(weighting=)` | `stage4_weighting_comparison.csv`, `weights_{scheme}_monthly.csv` |
 | 5. Momentum overlay | ✅ | `cesare/momentum_overlay.ipynb`; `fx_utils.momentum_panel`, `zscore_xs`, `carry_portfolio(filter_signal=)`; backtest §3 MOM factor | `stage5_momentum_comparison.csv`, `stage5_track_correlation.csv` |
 | 6. Regime analysis | ⬜ | — | — |
 | 7. ML extension (optional) | ⬜ | — | — |
@@ -293,39 +293,64 @@ FX exposure −0.10, ≈−1.1 in 2008 stress) — the long-USD tilt in crises *
 as an exposure. **Stage-6 bar: a regime rule must beat per-currency RR (combined net Sharpe
 0.457, MaxDD −28%) and the VIX threshold (0.441, −25%) — not the old binary hedge.**
 
-## 10. Stage 4 — Portfolio Construction Comparison ⬜
+## 10. Stage 4 — Portfolio Construction Comparison ✅
 
-**Status:** not started — only inverse-vol-within-legs (+40% cap) exists, inside `carry_portfolio`.
+**Status:** done. Four within-leg weighting schemes compared on the combined ALL quintile book,
+every variant re-vol-targeted to 10%, gross AND net, with turnover, cost drag and NW alpha vs the
+inverse-vol baseline, plus a falsifiable verdict (`cesare/portfolio_construction.ipynb` →
+`outputs/stage4_weighting_comparison.csv` + `outputs/weights_{scheme}_monthly.csv`). Reference:
+Ledoit–Wolf (2004), in Appendix B.
 
-**Design**
+**Design.** Hold everything fixed except within-leg weighting (combined quintile sort, monthly,
+same cost model); re-vol-target every variant to 10% so the Sharpe comparison is scale-free — the
+differentiators become net-of-cost efficiency and tail shape. Schemes: **equal**, **inverse vol**
+(current), **equal risk contribution (ERC)**, **mean-variance (MVO) with μ = forward-implied
+carry** (with μ = carry, the original plan's "mean-variance" and "maximum Sharpe" collapse into one
+scheme — Appendix C #8).
 
-Hold everything fixed except within-leg weighting (combined quintile sort, monthly, same cost
-model), and re-vol-target every variant to 10% so the Sharpe comparison is scale-free — the
-differentiators become net-of-cost efficiency and tail shape.
+**What exists**
 
-Schemes: **equal weight**, **inverse vol** (current), **equal risk contribution**,
-**mean-variance with μ = current forward-implied carry**. Note: with μ = carry, the original
-plan's "mean-variance" and "maximum Sharpe" collapse into one scheme (Appendix C #8).
+- **Refactor, not duplication:** `carry_portfolio` gained `weighting: str = "inv_vol"`
+  (`"equal" | "inv_vol" | "erc" | "mvo"`) and `cov_window: int = 250`; the dispatch is one branch on
+  the within-leg weight line, so the sort / filter / normalise / 40%-cap / no-lookahead scaffolding
+  stays single-sourced. Default `inv_vol` is **bit-identical** to earlier stages (asserted in-notebook
+  against the committed `weights_combined_monthly.csv`).
+- **Three pure helpers in `fx_utils`:**
+  - `shrunk_cov(xret, window=250)` — Ledoit–Wolf shrinkage toward a scaled-identity target
+    (`cov1Para`), computed on the leg's own names over the trailing 250d up to the rebalance date
+    (a small, well-conditioned block); not annualised (both consumers are scale-invariant in Σ).
+  - `erc_weights(cov, max_iter=1000, tol=1e-8)` — equal risk contribution via cyclical coordinate
+    descent; reduces exactly to inverse-vol on a diagonal cov. Cap applied outside, as for inv_vol.
+  - `mvo_weights(mu, cov, gross=1.0, max_share=0.40)` — long-only max-Sharpe (SLSQP) under leg-gross
+    and single-name-cap constraints, μ = `sign·carry` (no return forecasting); min-variance fallback
+    on degenerate μ, so the caller never sees NaNs.
+- **`cesare/portfolio_construction.ipynb`:** four schemes × {gross, net}, vol-targeted 10%/60d,
+  common window 2007-05→2026-06, IR vs FXCTEM8, NW alpha vs the same-basis inverse-vol baseline.
+  In-notebook guards: helper unit tests (ERC=inv_vol on diagonal, ERC equal-RC, MVO cap/gross/tilt,
+  shrunk_cov PD & better-conditioned), an ERC no-lookahead truncation test, the inv_vol bit-identity
+  check, and an exact reconciliation that vol-targeted inv_vol = Stage-3 `voltgt` (ALL 0.466 net
+  Sharpe, Δ = 0.000).
 
-**Next actions**
+**Results** (combined ALL book, common window, net of costs)
 
-1. Refactor, don't duplicate: add `weighting: str = "inv_vol"` to `carry_portfolio`
-   (`"equal" | "inv_vol" | "erc" | "mvo"`), keeping the sort/no-lookahead scaffolding
-   single-sourced.
-2. New pure helpers in `fx_utils`:
-   - `erc_weights(cov, max_iter=1000, tol=1e-8)` — equal risk contribution per leg (cyclical
-     coordinate descent).
-   - `shrunk_cov(xret, window=250)` — Ledoit–Wolf shrinkage (27 assets on a 60-obs window is
-     near-singular; 250d + shrinkage is the standard fix).
-   - `mvo_weights(mu, cov, gross=1.0, max_share=0.40)` — max-Sharpe under leg-gross and cap
-     constraints, μ = observable carry (no return forecasting).
-3. New notebook `cesare/portfolio_construction.ipynb`; report per-scheme **turnover** explicitly
-   (MVO will churn — net results are the decision criterion).
+| Scheme | Gross Sharpe | Net Sharpe | Turnover | MaxDD | Skew | α vs inv_vol (t) |
+|---|---|---|---|---|---|---|
+| Inverse vol (current) | 0.63 | **0.47** | 0.68 | −0.29 | −0.65 | — (baseline) |
+| ERC | 0.59 | 0.44 | 0.63 | −0.32 | −0.56 | −0.2%/yr (−0.5) |
+| Equal weight | 0.46 | 0.34 | 0.47 | −0.32 | −0.52 | −1.2%/yr (−1.8) |
+| Mean-variance (μ=carry) | 0.46 | 0.32 | 0.70 | −0.52 | −1.15 | −1.1%/yr (−0.8) |
 
-- **Outputs:** `outputs/stage4_weighting_comparison.csv`; `outputs/weights_{scheme}_monthly.csv`.
-- **Acceptance criteria:** four schemes × gross/net on the common window, with turnover; a written
-  conclusion on whether optimization beats inverse-vol **net of costs** (honest prior: modestly at
-  best).
+**Verdict — NO.** Optimization does not beat inverse-vol net of costs. **Inverse-vol is the best
+net-of-cost scheme.** ERC is a near-tie (it shares inverse-vol's diagonal limit and only re-weights
+for correlation) but its edge doesn't survive costs. Equal-weight gives up Sharpe by ignoring the
+vol structure. **MVO is the worst net track:** μ = noisy monthly carry makes it churn (highest
+turnover), concentrate into the cap, and inherit a fatter left tail (worst MaxDD −0.52, worst skew
+−1.15) — optimizing on estimation error. Every scheme's NW alpha vs inverse-vol is ≤ 0 and
+insignificant (|t| < 2), so there is no net outperformance to capture. This confirms the §10 prior
+on its pessimistic side and vindicates the baseline's inverse-vol choice.
+
+- **Outputs:** `outputs/stage4_weighting_comparison.csv` (9 rows: 4 schemes × gross/net + benchmark)
+  and `outputs/weights_{equal,inv_vol,erc,mvo}_monthly.csv` (unit books, gross 2, comparable).
 
 ## 11. Stage 5 — Momentum Overlay ✅
 
@@ -488,7 +513,7 @@ Funding audience.
 | 2 | §14.4 hygiene (README, requirements) | — | 0.5 d | Cheap; makes the repo presentable now |
 | 3 | Stage 3 completion ✅ | 1 | 1 d | Mostly assembles existing pieces; closes the first 🔶 |
 | 4 | Stage 5 momentum ✅ | 1 | 1.5 d | Feeds Stage 6 conditional stats and Stage 7 features |
-| 5 | Stage 4 weighting comparison | 1 | 1.5–2 d | Independent — parallelizable with #4 |
+| 5 | Stage 4 weighting comparison ✅ | 1 | 1.5–2 d | Independent — parallelizable with #4 |
 | 6 | Stage 6 regimes | 3, 4 | 1.5 d | Generalizes the Stage-3 threshold rule |
 | 7 | Stage 7 ML (optional) | 4, 5, 6 | 2–3 d | Last; explicitly droppable |
 | 8 | §14.2 final table + §14.3 report | all above | 1.5–2 d | Terminal deliverable |
@@ -529,12 +554,12 @@ regime-aware exposure management.
 | `weights_g10_monthly.csv` | backtest §6 | month-end weights, G10 track |
 | `weights_combined_monthly.csv` | backtest §6 | month-end weights, combined track |
 | `stage3_dynamic_comparison.csv` | dynamic_carry §6 | all Stage-3 variants × gross/net: full metrics, IR, turnover, cost drag, NW alpha vs baseline |
+| `stage4_weighting_comparison.csv` | portfolio_construction §3/5 | 4 within-leg schemes (equal/inv_vol/erc/mvo) × gross/net on the ALL book: full metrics, IR, turnover, cost drag, NW alpha vs inv_vol |
+| `weights_{scheme}_monthly.csv` (equal/inv_vol/erc/mvo) | portfolio_construction §5 | month-end **unit-book** weights per scheme (gross 2, pre-vol-target, so schemes are directly comparable) |
 | `stage5_momentum_comparison.csv` | momentum_overlay §5 | pure carry vs momentum vs filter vs blend, per lookback (21/63/252) × G10/ALL × gross/net: full metrics, IR, turnover, cost drag, NW alpha vs carry |
 | `stage5_track_correlation.csv` | momentum_overlay §4 | correlation matrix of the net daily tracks (carry↔momentum diversification) |
 
-**Planned:** `stage4_weighting_comparison.csv` +
-`weights_{scheme}_monthly.csv` (§10) ·
-`regime_series.csv` + `stage6_regime_stats.csv` (§12) · `stage7_ml_forecast_eval.csv` +
+**Planned:** `regime_series.csv` + `stage6_regime_stats.csv` (§12) · `stage7_ml_forecast_eval.csv` +
 `stage7_ml_strategy_stats.csv` (§13) · `final_comparison.csv` (§14.2).
 
 ## Appendix B — References

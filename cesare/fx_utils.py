@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
+from scipy.optimize import minimize  # only for mvo_weights (Stage 4); scipy ships with statsmodels
 
 RAW_DIR = Path(__file__).resolve().parent.parent / "data" / "raw"
 
@@ -397,20 +398,35 @@ def carry_portfolio(carry_ann: pd.DataFrame, xret: pd.DataFrame, n_buckets: int 
                     rebal: str = "ME", vol_window: int = 60, min_per_leg: int = 2,
                     universe: list[str] | None = None,
                     max_leg_share: float = 0.40,
-                    filter_signal: pd.DataFrame | None = None) -> pd.DataFrame:
-    """Daily weight panel of an inverse-vol long/short carry sort.
+                    filter_signal: pd.DataFrame | None = None,
+                    weighting: str = "inv_vol", cov_window: int = 250) -> pd.DataFrame:
+    """Daily weight panel of a long/short carry sort, weighted within each leg.
 
     On each rebalance date (last observation per `rebal` period) currencies are
     sorted on carry into n_buckets; the top bucket is held long, the bottom
-    short. Within each leg weights are proportional to 1/trailing-vol
-    (vol_window days, needing >= vol_window//2 observations, which gates late
-    entrants like CNH), normalised to gross 1 per side (book gross 2, net 0),
-    with any single name capped at max_leg_share of its leg. A rebalance date
-    with fewer than min_per_leg names per bucket keeps the previous weights.
-    Weights are forward-filled to trading days and shifted one day — applied
-    from the next trading day, mirroring carry_hml_factor (no lookahead).
-    Note: signals are per-column last observations of the period, so a gappy
-    currency can contribute a slightly stale (intra-month) carry reading.
+    short. Within each leg weights follow `weighting`, are normalised to gross 1
+    per side (book gross 2, net 0), with any single name capped at
+    max_leg_share of its leg. A rebalance date with fewer than min_per_leg names
+    per bucket keeps the previous weights. Weights are forward-filled to trading
+    days and shifted one day — applied from the next trading day, mirroring
+    carry_hml_factor (no lookahead). Note: signals are per-column last
+    observations of the period, so a gappy currency can contribute a slightly
+    stale (intra-month) carry reading.
+
+    `weighting` selects the within-leg scheme (Stage 4 comparison):
+    - "inv_vol" (default): proportional to 1/trailing-vol (vol_window days,
+      needing >= vol_window//2 obs, which gates late entrants like CNH).
+    - "equal": 1/k per name.
+    - "erc": equal risk contribution (erc_weights) on the leg's shrunk_cov.
+    - "mvo": max-Sharpe (mvo_weights) with mu = sign*carry on the leg's
+      shrunk_cov.
+    For "erc"/"mvo" the covariance is a Ledoit-Wolf estimate over the trailing
+    `cov_window` days up to the rebalance date, computed on the leg's own names
+    (a small, well-conditioned block); a leg with fewer than
+    max(2*len(names), vol_window) complete rows falls back to inv_vol for that
+    leg. Because the covariance uses data only up to dt and the panel is
+    shifted one day at the end, the optimised schemes add no lookahead. The
+    default preserves the exact inverse-vol behaviour of earlier stages.
 
     `filter_signal` (optional, same panel shape) applies a directional double
     sort after bucketing: long-leg names are kept only where filter_signal >= 0
@@ -421,11 +437,14 @@ def carry_portfolio(carry_ann: pd.DataFrame, xret: pd.DataFrame, n_buckets: int 
     period is simply left flat. filter_signal is sampled month-end and enters at
     t-1 like the carry signal, so the overlay adds no lookahead.
     """
+    if weighting not in ("equal", "inv_vol", "erc", "mvo"):
+        raise ValueError(f"weighting must be equal/inv_vol/erc/mvo, got {weighting!r}")
     cols = carry_ann.columns.intersection(xret.columns)
     if universe is not None:
         cols = cols.intersection(universe)
+    xr = xret[cols]
     signal = carry_ann[cols].resample(rebal).last()
-    vol = xret[cols].rolling(vol_window, min_periods=vol_window // 2).std()
+    vol = xr.rolling(vol_window, min_periods=vol_window // 2).std()
     vol_rb = vol.resample(rebal).last()
     filt = filter_signal[cols].resample(rebal).last() if filter_signal is not None else None
 
@@ -439,6 +458,7 @@ def carry_portfolio(carry_ann: pd.DataFrame, xret: pd.DataFrame, n_buckets: int 
             continue
         w = pd.Series(0.0, index=cols)
         f = filt.loc[dt] if filt is not None else None
+        hist = xr.loc[:dt] if weighting in ("erc", "mvo") else None
         for names, sign in ((valid["carry"].nlargest(k).index, 1.0),
                             (valid["carry"].nsmallest(k).index, -1.0)):
             if f is not None:
@@ -446,8 +466,22 @@ def carry_portfolio(carry_ann: pd.DataFrame, xret: pd.DataFrame, n_buckets: int 
                 names = names[(fn >= 0).values] if sign > 0 else names[(fn <= 0).values]
                 if len(names) == 0:
                     continue
-            leg = (1.0 / valid.loc[names, "vol"])
-            leg /= leg.sum()
+            if weighting == "equal":
+                leg = pd.Series(1.0, index=names)
+            elif weighting == "inv_vol":
+                leg = (1.0 / valid.loc[names, "vol"])
+            else:
+                sub = hist[list(names)]
+                if len(sub.tail(cov_window).dropna(how="any")) < max(2 * len(names), vol_window):
+                    leg = (1.0 / valid.loc[names, "vol"])  # cov not estimable -> inv_vol
+                else:
+                    cov = shrunk_cov(sub, window=cov_window)
+                    if weighting == "erc":
+                        leg = erc_weights(cov)
+                    else:
+                        mu = (sign * valid.loc[names, "carry"]).to_numpy()
+                        leg = mvo_weights(mu, cov, gross=1.0, max_share=max_leg_share)
+            leg = leg / leg.sum()
             for _ in range(10):
                 if not (leg > max_leg_share + 1e-12).any():
                     break
@@ -478,6 +512,127 @@ def vol_target_weights(weights: pd.DataFrame, xret: pd.DataFrame, target: float 
     scalar_rb = scalar.resample(rebal).last()
     daily = scalar_rb.reindex(weights.index, method="ffill").shift(1)
     return weights.mul(daily, axis=0)
+
+
+# ---------------------------------------------------------------------------
+# Within-leg weighting schemes (Stage 4): shrinkage cov, ERC, mean-variance
+# ---------------------------------------------------------------------------
+
+def shrunk_cov(xret: pd.DataFrame, window: int = 250) -> pd.DataFrame:
+    """Ledoit-Wolf shrinkage covariance toward a scaled-identity target.
+
+    Takes a daily-return frame, uses its last `window` complete-case rows
+    (tail(window) then dropna(how="any"), so the sample covariance is genuinely
+    PSD rather than a pairwise pseudo-cov), demeans each column and forms the
+    MLE sample covariance S = X'X / t. Shrinks toward F = mu*I with
+    mu = trace(S)/N (Ledoit & Wolf 2004, the single-parameter `cov1Para`
+    estimator), at the closed-form optimal intensity
+    delta* = clip((pi_hat / gamma_hat) / t, 0, 1), where
+    pi_hat = sum((X^2)'(X^2)/t - S^2) and gamma_hat = ||S - F||_F^2. Returns
+    delta*F + (1-delta*)S as a DataFrame labelled by the surviving columns.
+
+    NOT annualised: both consumers (erc_weights and the fixed-budget max-Sharpe
+    in mvo_weights) are invariant to Sigma -> c*Sigma, so scaling by ANN_DAYS
+    would be a no-op — kept as a plain daily estimator. Too-few-rows and
+    universe selection are the caller's responsibility (see carry_portfolio),
+    which keeps this helper pure; given >= 2 complete rows it always returns a
+    symmetric positive-definite matrix.
+    """
+    data = xret.tail(window).dropna(how="any")
+    cols = data.columns
+    X = data.to_numpy(dtype=float)
+    t, n = X.shape
+    X = X - X.mean(axis=0)
+    S = (X.T @ X) / t
+    mu = np.trace(S) / n
+    F = mu * np.eye(n)
+    Xsq = X ** 2
+    pi_hat = ((Xsq.T @ Xsq) / t - S ** 2).sum()
+    gamma = np.sum((S - F) ** 2)
+    delta = float(np.clip((pi_hat / gamma) / t, 0.0, 1.0)) if gamma > 0 else 0.0
+    sigma = delta * F + (1.0 - delta) * S
+    return pd.DataFrame(sigma, index=cols, columns=cols)
+
+
+def erc_weights(cov, max_iter: int = 1000, tol: float = 1e-8):
+    """Long-only equal-risk-contribution weights via cyclical coordinate descent.
+
+    Solves the strictly-convex log-barrier program
+    min 1/2 w'Sigma w - (1/N) sum log w_i, w > 0, whose stationary point
+    equalises the risk contributions RC_i = w_i (Sigma w)_i (Spinu 2013;
+    Griveau-Billion, Richard & Roncalli 2013). Each coordinate update takes the
+    positive root of y_i Sigma_ii + c_i - b/y_i = 0 with
+    c_i = sum_{j!=i} y_j Sigma_ij and b = 1/N, sweeping cyclically from an
+    inverse-vol warm start; the update runs on the raw y (the log-barrier fixed
+    point y_i (Sigma y)_i = b), while convergence is measured on the normalised
+    weights y/sum(y) against `tol` for interpretability. Returns weights summing
+    to 1 (positive). A diagonal Sigma converges in one sweep to
+    w_i proportional to 1/sigma_i — i.e. reduces exactly to inverse-vol.
+
+    No single-name cap here: the cap is applied outside by carry_portfolio's
+    existing clip-and-renormalise loop, exactly as for inverse-vol.
+    """
+    S = np.asarray(cov, dtype=float)
+    n = S.shape[0]
+    if n == 1:
+        w = np.ones(1)
+    else:
+        b = 1.0 / n
+        y = 1.0 / np.sqrt(np.diag(S))
+        w = y / y.sum()
+        for _ in range(max_iter):
+            w_prev = y / y.sum()
+            for i in range(n):
+                c = S[i] @ y - S[i, i] * y[i]
+                a = S[i, i]
+                y[i] = (-c + np.sqrt(c * c + 4.0 * a * b)) / (2.0 * a)
+            w = y / y.sum()
+            if np.max(np.abs(w - w_prev)) < tol:
+                break
+    return pd.Series(w, index=cov.index) if isinstance(cov, pd.DataFrame) else w
+
+
+def mvo_weights(mu, cov, gross: float = 1.0, max_share: float = 0.40):
+    """Long-only max-Sharpe weights under leg-gross and single-name-cap constraints.
+
+    Maximises (mu'w) / sqrt(w'Sigma w) subject to w >= 0, sum(w) = gross,
+    w <= max_share, via SLSQP on the negative Sharpe ratio (a tiny
+    trace-proportional ridge on Sigma guarantees strict positive-definiteness).
+    mu is the observable forward-implied carry — no return forecasting.
+
+    Precondition (caller's responsibility): pass mu = sign * carry so that
+    shorting a low/negative-carry name reads as positive expected profit;
+    mvo_weights is sign-agnostic and always returns positive weights summing to
+    `gross`, with carry_portfolio applying `sign` outside. Guards: if a leg is
+    too small for the cap (n * max_share < gross) the cap is relaxed to
+    eff_cap = max(max_share, gross/n) — matching inverse-vol's effective
+    equal-weight collapse in the same case; if mu has no positive entry the
+    max-Sharpe objective is ill-posed and we fall back to min-variance under the
+    same constraints; if the optimiser fails we fall back to equal weight. The
+    result is always finite and feasible, so the caller never sees NaNs.
+    """
+    mu = np.asarray(mu, dtype=float)
+    S = np.asarray(cov, dtype=float)
+    n = len(mu)
+    idx = cov.index if isinstance(cov, pd.DataFrame) else None
+    eff_cap = max(max_share, gross / n)
+    S = S + 1e-10 * (np.trace(S) / n) * np.eye(n)
+    bounds = [(0.0, eff_cap)] * n
+    cons = ({"type": "eq", "fun": lambda w: w.sum() - gross},)
+    w0 = np.full(n, gross / n)
+
+    def _solve(objective):
+        r = minimize(objective, w0, method="SLSQP", bounds=bounds,
+                     constraints=cons, options={"maxiter": 200, "ftol": 1e-12})
+        w = r.x if r.success else w0
+        w = np.clip(w, 0.0, eff_cap)
+        return w * (gross / w.sum())
+
+    if np.any(mu > 0):
+        w = _solve(lambda w: -(mu @ w) / np.sqrt(w @ S @ w + 1e-18))
+    else:
+        w = _solve(lambda w: w @ S @ w)
+    return pd.Series(w, index=idx) if idx is not None else w
 
 
 def exposure_scalar(indicator: pd.Series, lookback: int = 756, q: float = 0.80,
