@@ -2,7 +2,7 @@
 
 *Author: Cesare Bavaresco · UChicago Summer Project Lab with Bank of America (Corporate Treasury / Global Funding).*
 *Data: daily Bloomberg, 2007-01 → 2026-06, G10 + EM currencies vs USD.*
-*Last updated: 2026-07-07.*
+*Last updated: 2026-07-10.*
 *Status legend: ✅ done · 🔶 partial · ⬜ not started.*
 
 This document replaces the original generic project outline. It is now git-tracked and serves as the
@@ -23,7 +23,9 @@ Mapped to the proposal's three implementation goals:
 
 1. Collect Bloomberg time series — ✅ done (§5).
 2. Build reusable portfolio / return / risk libraries — ✅ done (`cesare/fx_utils.py`, §5.3).
-3. Explore strategy behaviour across market environments — 🔶 in progress (Stage 3 ✅; Stages 4–6 remain).
+3. Explore strategy behaviour across market environments — ✅ core done (Stages 3–6 all closed).
+   **Phase 3 (§17) now pursues a genuinely novel edge beyond vanilla EM carry** — the main event
+   for Jul–Aug.
 
 ## 2. Research Question
 
@@ -88,6 +90,21 @@ Key findings so far:
    binary IV/RR hedge is *rejected* for the combined book net of costs (Sharpe 0.47 → 0.37 with
    a worse MaxDD), while per-currency RR conditioning delivers the tail improvement
    (skew −0.65 → −0.60, CVaR₉₉ 2.9% → 2.7%) at ~zero Sharpe cost. Details in §9.
+6. **Optimization does not beat the simple book (Stage 4).** Across equal / inverse-vol / ERC /
+   mean-variance within-leg weighting, all re-vol-targeted (`stage4_weighting_comparison.csv`),
+   inverse-vol wins net of costs (0.47); ERC ties, equal and MVO trail, and no scheme has
+   significant net alpha. Mean-variance is the *worst* net track — it churns on noisy carry.
+7. **Momentum does not beat the hedges (Stage 5).** Momentum-filter and carry/momentum blends give
+   up 0.1–0.5 Sharpe *and* worsen the drawdown; standalone momentum diversifies but loses money
+   net. Retained only as a near-orthogonal regression factor.
+8. **Regimes are a diagnostic, not a winning allocation (Stage 6).** The carry premium is a
+   calm-market phenomenon — vol-targeted carry earns Sharpe 0.57 (Low) / 0.94 (Moderate) but 0.00
+   in Crisis at ~1.5× the vol — yet regime-timed de-risking does not beat per-currency RR with
+   significance (max |t| 0.59). Adopt the regime series as a lens, not a rule.
+
+**Through-line:** the 2007–2026 premium is EM carry, and every *standard* embellishment — hedges,
+optimization, momentum, regime timing — fails to beat the simple vol-targeted inverse-vol book net
+of costs. **Phase 3 (§17) asks whether a less standard, data-differentiated signal can.**
 
 Stage dashboard:
 
@@ -463,8 +480,10 @@ buys tail insurance, not Sharpe.
 
 ## 13. Stage 7 — Machine Learning Extension (Optional) ⬜
 
-**Status:** not started. The original plan named five models but no target, feature lags, or CV
-scheme — for ~230 monthly observations that silence is a lookahead trap (Appendix C #8). Specs:
+**Status:** not started; **deferred to the "back pocket" (decision 2026-07-10)** — Phase-3
+novel-edge work (§17) comes first, and ML returns only if a new signal set makes it worthwhile.
+The original plan named five models but no target, feature lags, or CV scheme — for ~230 monthly
+observations that silence is a lookahead trap (Appendix C #8). Specs:
 
 1. **Target — timing formulation first:** next-month combined-track (or HML_FX) return, monthly,
    ~230 obs. Cross-sectional per-currency forecasting is a stretch goal only. State up front:
@@ -542,12 +561,13 @@ Funding audience.
 | 4 | Stage 5 momentum ✅ | 1 | 1.5 d | Feeds Stage 6 conditional stats and Stage 7 features |
 | 5 | Stage 4 weighting comparison ✅ | 1 | 1.5–2 d | Independent — parallelizable with #4 |
 | 6 | Stage 6 regimes ✅ | 3, 4 | 1.5 d | Generalizes the Stage-3 threshold rule |
-| 7 | Stage 7 ML (optional) | 4, 5, 6 | 2–3 d | Last; explicitly droppable |
-| 8 | §14.2 final table + §14.3 report | all above | 1.5–2 d | Terminal deliverable |
+| 7 | **Phase 3 — novel edge (§17)** ← next | 4, 5, 6 | 4–6 wk | The main event: a differentiated signal that beats the simple book |
+| 8 | Stage 7 ML (optional) | 7 | 2–3 d | Back pocket; only if Phase-3 signals warrant it |
+| 9 | §14.4 hygiene + §14.2 final table + §14.3 report | all above | 2–3 d | Terminal deliverable; folds in the Phase-3 result |
 
 Key dependency edges: metrics → everything; momentum → regime stats → ML features; the Stage-3
-verdict shapes the Stage-6 design (the regime rule must beat the binary hedge); Stage 4 is the
-only fully parallel branch.
+verdict shapes the Stage-6 design (the regime rule must beat the binary hedge). **Phase 3 (§17) is
+now the critical path — Stage 7 ML and the final report both wait on its outcome.**
 
 ## 16. Alignment with the BoA Proposal
 
@@ -558,6 +578,48 @@ market environments (Stages 3, 6); and building reusable Python tools for future
 (`fx_utils`). Beyond replicating the academic literature, it adds the practical layers that matter
 on a desk: real transaction costs, external benchmark validation, crash-risk measurement, and
 regime-aware exposure management.
+
+---
+
+## 17. Phase 3 — Beyond Vanilla EM Carry: Toward a Novel Edge (Jul–Aug 2026) ⬜ ← current focus
+
+**Why.** Stages 1–6 produced a clean but unsurprising result: the 2007–2026 carry premium is an EM
+phenomenon, and every *standard* embellishment — crash hedges (St3), portfolio optimization (St4),
+momentum (St5), regime timing (St6) — fails to beat the simple vol-targeted inverse-vol book net of
+costs. "Be long EM carry, size by inverse vol" is defensible but not differentiated. With ~7 weeks
+of runway (10 Jul → end Aug) the goal is a genuinely **novel, defensible signal** that exploits the
+repo's less-common data — full FX **option surfaces** (ATM / 25Δ RR / BF), **EMBI**, onshore rates →
+**cross-currency basis** — and speaks to the BoA Corporate-Treasury / Global-Funding audience.
+
+**The bar (unchanged, falsifiable).** Any new signal must beat *both* the simple vol-targeted book
+(ALL net Sharpe 0.466) *and* the per-currency-RR-hedged book (0.457), net of costs, with Newey–West
+significance — or be reported honestly as another null result. Same guardrails (§6): no lookahead,
+gross AND net, IR vs benchmark, common window.
+
+**Candidate directions** (feasibility = data already in `data/raw/`):
+
+| # | Direction | Thesis (why it's *not* just "long EM") | Data in repo? | Novelty / audience fit |
+|---|---|---|---|---|
+| D1 | **Crash-risk-premium-adjusted carry** | The 25Δ risk-reversal prices how expensively each currency's crash is already insured; two currencies with equal carry but different RR are *not* the same trade. Signal = carry orthogonalized to the priced crash-risk premium ("clean" carry), and RR-richness as a standalone cross-sectional signal. | ✅ full RR/ATM/BF surfaces (already crash-sign-normalised) | High — turns the Stage-2 crash finding into alpha; uses data most books lack |
+| D2 | **FX volatility risk premium (VRP)** | Implied − realized vol is a systematically harvested premium *distinct* from directional carry; sell rich vol, combine with carry as a second, diversifying return source. | ✅ ATM IV + realized from spot (option-return proxy is the crux) | High — a different premium entirely |
+| D3 | **Cross-currency basis / dollar funding** | Post-2008 CIP fails; the basis measures the *dollar funding premium* (Du–Tepper–Verdelhan). Use it as a funding-stress conditioner *and* a signal — dollar-shortage currencies behave differently. | ✅ `cip_basis` already built from onshore rates + forwards | High — modern; **literally** the Global-Funding desk's language |
+| D4 | **FX value + multi-factor** | Add a value factor (real-exchange-rate mean reversion / PPP) to carry+momentum+dollar and time the combination; carry alone is one leg of a fuller factor model. | ⚠️ needs a REER/PPP proxy (constructible from long-horizon real spot) | Medium — more "complete" than novel |
+| D5 | **Positioning / crowding** | Crowded carry unwinds violently; fade extreme CFTC IMM speculative positioning / de-risk when carry is crowded (the parked thread). | ⚠️ needs a CFTC pull (public, weekly; G10-ish only) | Medium — underused data; thin EM coverage |
+| D6 | **Term structure of carry** | Harvest the forward-curve slope / roll-down rather than the single 1M point; *which tenor* to hold. | ⚠️ needs multi-tenor forwards (only 1M pulled) | Medium |
+
+**Recommendation:** lead with **D1** — the most differentiated signal, fully feasible today, and it
+re-uses the crash-risk thread the project already owns — optionally paired with **D3** (the
+audience-relevant funding angle, also feasible today). **D2** is the high-upside stretch. D4–D6 need
+a data add first.
+
+**Process per chosen direction:** (1) deep-read the literature to sharpen the exact signal and its
+priors; (2) add a pure `fx_utils` helper + a dedicated notebook under the existing guardrails;
+(3) backtest gross+net vs the two bars with NW tests; (4) an explicit adopt/reject verdict and a new
+`stageX_*.csv`. The Phase-3 result — positive *or* null — becomes the centrepiece of the §14.3 report.
+
+**Immediate next action:** pick the direction(s) (D1 recommended), then deep-research + spec the
+first signal. Repo hygiene (§14.4) can run in parallel; the final report (§14.2/14.3) waits to fold
+in the Phase-3 finding.
 
 ---
 
