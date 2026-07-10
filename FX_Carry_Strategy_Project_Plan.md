@@ -99,7 +99,7 @@ Stage dashboard:
 | 3. Dynamic carry | ✅ | `cesare/dynamic_carry.ipynb`; `fx_utils.exposure_scalar` | `stage3_dynamic_comparison.csv` |
 | 4. Portfolio construction comparison | ✅ | `cesare/portfolio_construction.ipynb`; `fx_utils.shrunk_cov`, `erc_weights`, `mvo_weights`, `carry_portfolio(weighting=)` | `stage4_weighting_comparison.csv`, `weights_{scheme}_monthly.csv` |
 | 5. Momentum overlay | ✅ | `cesare/momentum_overlay.ipynb`; `fx_utils.momentum_panel`, `zscore_xs`, `carry_portfolio(filter_signal=)`; backtest §3 MOM factor | `stage5_momentum_comparison.csv`, `stage5_track_correlation.csv` |
-| 6. Regime analysis | ⬜ | — | — |
+| 6. Regime analysis | ✅ | `cesare/regime_analysis.ipynb`; `fx_utils.regime_classify` | `regime_series.csv`, `stage6_regime_stats.csv`, `stage6_conditional_by_regime.csv` |
 | 7. ML extension (optional) | ⬜ | — | — |
 | Final evaluation & report | 🔶 | §14.1 metrics ✅ done; report not started | regenerated stats CSVs |
 
@@ -404,35 +404,62 @@ alpha unchanged; G10 +0.07 (t 1.7, marginal) — carry and momentum are near-ort
   (0.466 → 0.457, MaxDD −28%, skew −0.60) remains the preferred near-free tail hedge; momentum is
   carried forward only as a regression **factor**, not an allocation.
 
-## 12. Stage 6 — Market Regime Analysis ⬜
+## 12. Stage 6 — Market Regime Analysis ✅
 
-**Status:** not started. Stage 3's `exposure_scalar` threshold rules are the existing
-regime-like logic; this stage generalizes them and, if successful, supersedes them.
+**Status:** done. A transparent percentile-composite regime classifier, the conditional-by-regime
+performance table, and a head-to-head of regime-aware allocation vs the Stage-3 hedges all exist,
+gross AND net, with NW tests and an explicit verdict (`cesare/regime_analysis.ipynb` →
+`outputs/regime_series.csv` + `stage6_regime_stats.csv` + `stage6_conditional_by_regime.csv`).
+Reference: extends the Stage-2 crash-risk finding; Ledoit–Wolf N/A here.
 
-**Next actions**
+**Design.** Generalise Stage 3's single-indicator thresholds into a multi-indicator regime, then ask
+(a) descriptively where carry earns, and (b) whether regime-aware de-risking beats the best Stage-3
+hedges net of costs.
 
-1. **Classification variables** (all daily, already in `data/raw/`): VIX (`global_risk`),
-   aggregate FX ATM IV (cross-sectional mean of `vol_surface_panel("ATM","1M")`), EMBI spread
-   (`load_em_risk`); optional: DXY trend, carry dispersion (Stage-2 add-on).
-2. **Primary method — transparent percentile composite:**
-   `regime_classify(indicators, lookback=756, breaks=(0.70, 0.90))` — composite = mean of
-   trailing-3y percentile ranks; regimes **Low / Moderate / Crisis** at asymmetric breaks.
-   Rationale: crisis is a tail state — equal terciles would label a third of history "crisis"
-   (Appendix C #9). Trailing windows only, sampled at rebalance, shifted per §6.
-3. **Stretch (optional, clearly marked):** 2–3 state Gaussian HMM on (DOL realized vol,
-   carry-factor return), expanding-window fit only.
-4. **Analyses:** (a) conditional performance of every existing track by regime, with observation
-   counts (expected: carry earned in Low, crashes in Crisis — verify); (b) regime-aware
-   allocation — exposure multipliers {Low: 1.0, Moderate: 1.0, Crisis: 0.5 or 0.0} — compared
-   head-to-head vs the best Stage-3 rules (per-currency RR, VIX threshold) and vs static,
-   gross+net.
+**What exists**
 
-- **Outputs:** `outputs/regime_series.csv`, `outputs/stage6_regime_stats.csv`, regime-shaded
-  cumulative-return plot.
-- **Acceptance criteria:** regime series reproducible from the stated rules alone; conditional
-  table includes n_days per regime; net comparison (regime-aware vs best Stage-3 rules vs static)
-  with an explicit adopt/reject verdict — per §9, the bar is per-currency RR (combined net Sharpe
-  0.457, MaxDD −28%) and the VIX threshold (0.441, −25%), not the rejected binary hedge.
+- **`fx_utils.regime_classify(indicators, lookback=756, breaks=(0.70, 0.90))`** — ranks each
+  indicator into its trailing-3y percentile (min_periods = lookback//2), averages the ranks, and
+  cuts the composite into **Low / Moderate / Crisis** at asymmetric breaks (crisis is a tail state —
+  equal terciles would mislabel a third of history). Trailing windows only → no lookahead as a
+  descriptive label; lagged (ME-sampled + shift 1) when it drives allocation, mirroring
+  `exposure_scalar`. Returns per-indicator ranks + composite + regime.
+- **Classification variables** (daily, in `data/raw/`): VIX (`global_risk`), aggregate FX ATM IV
+  (cross-sectional mean of `vol_surface_panel("ATM","1M")` over the 21 option-covered ALL names),
+  EMBI spread (`load_em_risk`). The composite flags **77% Low / 18% Moderate / 6% Crisis**; Crisis
+  days isolate exactly the known episodes — 2008 GFC, 2015–16 China/EM, 2020 COVID, 2022 risk-off.
+- **`cesare/regime_analysis.ipynb`:** regime diagnostics + no-lookahead truncation test;
+  conditional performance of the vol-targeted book by lagged regime (with n_days); regime-aware
+  allocation variants {reg_half: Crisis→0.5, reg_off: Crisis→0.0, reg_mod: Moderate→0.5/Crisis→0.0
+  (beyond-spec sensitivity)} vs static / voltgt / VIX / per-ccy RR, gross+net, common window, NW
+  alpha vs the vol-targeted baseline. In-notebook guards: weights-level ≡ return-level machinery
+  check (<1e-12), ≤2 trade-days/month cost alignment, and exact reconciliation that voltgt/vix/rrccy
+  net Sharpe match `stage3_dynamic_comparison.csv`.
+
+**Results** — conditional performance (ALL vol-targeted book, net-of-nothing gross, by lagged regime)
+
+| Regime | n_days | Ann. return | Ann. vol | Sharpe | Skew | Share of total P&L |
+|---|---|---|---|---|---|---|
+| Low | 3,603 | 6.0% | 0.107 | 0.57 | −0.71 | 62% |
+| Moderate | 822 | 10.6% | 0.113 | **0.94** | −0.27 | 25% |
+| Crisis | 277 | −0.0% | 0.159 | −0.00 | −0.98 | 0% |
+
+Regime-aware allocation vs the bars (ALL net Sharpe): reg_half **0.470**, reg_off 0.466,
+reg_mod 0.483 · voltgt 0.466 · **per-ccy RR 0.457** · **VIX 0.441**. All regime variants' NW alpha
+vs voltgt is insignificant (max |t| = 0.59).
+
+**Verdict — REJECT as a replacement, ADOPT as a diagnostic.** Descriptively the regime lens is the
+payoff: the carry premium is a calm-market phenomenon (Sharpe ~0.6 Low, ~0.9 Moderate) that earns
+**nothing in Crisis at ~1.5× the vol** — the ~6% of days carrying the crash risk. But as an
+allocation rule no regime variant beats the Stage-3 per-currency RR hedge with significance
+(max |t| 0.59); crisis-only de-risking lands within a whisker of the baseline, and reg_mod's higher
+point estimate comes from de-risking the *highest-Sharpe* regime (a vol-scaling artifact + mild
+spec-search). Per-currency RR remains the preferred near-free tail hedge; the regime series is kept
+as an interpretive tool and a Stage-7 feature source. Consistent with the project: crash-conditioning
+buys tail insurance, not Sharpe.
+
+- **Outputs:** `outputs/regime_series.csv` (daily ranks + composite + regime), `stage6_regime_stats.csv`
+  (7 variants × gross/net + benchmark), `stage6_conditional_by_regime.csv`.
 
 ## 13. Stage 7 — Machine Learning Extension (Optional) ⬜
 
@@ -514,7 +541,7 @@ Funding audience.
 | 3 | Stage 3 completion ✅ | 1 | 1 d | Mostly assembles existing pieces; closes the first 🔶 |
 | 4 | Stage 5 momentum ✅ | 1 | 1.5 d | Feeds Stage 6 conditional stats and Stage 7 features |
 | 5 | Stage 4 weighting comparison ✅ | 1 | 1.5–2 d | Independent — parallelizable with #4 |
-| 6 | Stage 6 regimes | 3, 4 | 1.5 d | Generalizes the Stage-3 threshold rule |
+| 6 | Stage 6 regimes ✅ | 3, 4 | 1.5 d | Generalizes the Stage-3 threshold rule |
 | 7 | Stage 7 ML (optional) | 4, 5, 6 | 2–3 d | Last; explicitly droppable |
 | 8 | §14.2 final table + §14.3 report | all above | 1.5–2 d | Terminal deliverable |
 
@@ -558,8 +585,11 @@ regime-aware exposure management.
 | `weights_{scheme}_monthly.csv` (equal/inv_vol/erc/mvo) | portfolio_construction §5 | month-end **unit-book** weights per scheme (gross 2, pre-vol-target, so schemes are directly comparable) |
 | `stage5_momentum_comparison.csv` | momentum_overlay §5 | pure carry vs momentum vs filter vs blend, per lookback (21/63/252) × G10/ALL × gross/net: full metrics, IR, turnover, cost drag, NW alpha vs carry |
 | `stage5_track_correlation.csv` | momentum_overlay §4 | correlation matrix of the net daily tracks (carry↔momentum diversification) |
+| `regime_series.csv` | regime_analysis §5 | daily per-indicator percentile ranks + composite + Low/Moderate/Crisis label |
+| `stage6_regime_stats.csv` | regime_analysis §5 | 7 allocation variants (static/voltgt/vix/rrccy/reg_half/reg_off/reg_mod) × gross/net: full metrics, IR, turnover, cost drag, NW alpha vs voltgt |
+| `stage6_conditional_by_regime.csv` | regime_analysis §5 | vol-targeted book's return/vol/Sharpe/skew/P&L-share by regime, with n_days |
 
-**Planned:** `regime_series.csv` + `stage6_regime_stats.csv` (§12) · `stage7_ml_forecast_eval.csv` +
+**Planned:** `stage7_ml_forecast_eval.csv` +
 `stage7_ml_strategy_stats.csv` (§13) · `final_comparison.csv` (§14.2).
 
 ## Appendix B — References

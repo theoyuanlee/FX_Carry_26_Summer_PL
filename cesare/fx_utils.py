@@ -670,6 +670,35 @@ def exposure_scalar(indicator: pd.Series, lookback: int = 756, q: float = 0.80,
     return daily
 
 
+def regime_classify(indicators: pd.DataFrame, lookback: int = 756,
+                    breaks: tuple[float, float] = (0.70, 0.90)) -> pd.DataFrame:
+    """Percentile-composite market-regime classifier: Low / Moderate / Crisis.
+
+    Each indicator column (VIX, aggregate FX ATM implied vol, EMBI spread, ...)
+    is ranked into its own trailing `lookback`-day percentile (756d ≈ 3y,
+    min_periods = lookback // 2 — the library's window // 2 convention); the
+    composite is the row-mean of the available ranks. Regimes are cut at
+    asymmetric `breaks` on the composite: `composite <= breaks[0]` -> Low,
+    `<= breaks[1]` -> Moderate, else Crisis. Asymmetric because crisis is a tail
+    state — equal terciles would mislabel a third of history "crisis".
+
+    Trailing windows only, so the label at date t uses data through t and adds
+    no lookahead as a descriptive series; when it drives allocation it must be
+    lagged (resample at rebalance + shift one day), exactly like exposure_scalar.
+    Returns a daily frame: each indicator's `<name>_rank`, the `composite`, and
+    the `regime` label (NaN through the burn-in where no rank is available yet).
+    """
+    ranks = indicators.rolling(lookback, min_periods=lookback // 2).rank(pct=True)
+    composite = ranks.mean(axis=1).rename("composite")
+    lo, hi = breaks
+    regime = pd.cut(composite, bins=[-np.inf, lo, hi, np.inf],
+                    labels=["Low", "Moderate", "Crisis"])
+    out = ranks.add_suffix("_rank")
+    out["composite"] = composite
+    out["regime"] = regime.astype(object).where(composite.notna())
+    return out
+
+
 def portfolio_returns(weights: pd.DataFrame, xret: pd.DataFrame,
                       name: str = "portfolio") -> pd.Series:
     """Daily portfolio return Σ w·r (min_count=1 so pre-inception days stay NaN).
