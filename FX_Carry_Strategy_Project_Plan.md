@@ -581,7 +581,7 @@ regime-aware exposure management.
 
 ---
 
-## 17. Phase 3 — Beyond Vanilla EM Carry: Toward a Novel Edge (Jul–Aug 2026) ⬜ ← current focus
+## 17. Phase 3 — Beyond Vanilla EM Carry: Toward a Novel Edge (Jul–Aug 2026) 🔶 ← current focus (D1 ✅ null)
 
 **Why.** Stages 1–6 produced a clean but unsurprising result: the 2007–2026 carry premium is an EM
 phenomenon, and every *standard* embellishment — crash hedges (St3), portfolio optimization (St4),
@@ -621,6 +621,64 @@ priors; (2) add a pure `fx_utils` helper + a dedicated notebook under the existi
 first signal. Repo hygiene (§14.4) can run in parallel; the final report (§14.2/14.3) waits to fold
 in the Phase-3 finding.
 
+### 17.1 D1 — Crash-Risk-Premium-Adjusted Carry ✅ (Jul 2026) — **null**
+
+**Status:** done. An option-implied-skew battery, built on the matched 21-name option universe and
+falsified against both bars. Result: **null** — a valid deliverable.
+
+**What exists:**
+- Helpers in `fx_utils.py`: `implied_skew_panel` (RR/ATM smile skew; crash-positive = the *negative*
+  of risk-neutral skewness), `realized_skew_panel` (trailing physical skew of `xret`), `xs_residual`
+  (per-date cross-sectional clean-carry residual). All no-lookahead (contemporaneous or trailing;
+  sampled month-end + shift-1 downstream), citation-dense house style.
+- Notebook `cesare/skew_carry.ipynb` (setup → signals → tracks → stats → spanning → validation →
+  outputs → verdict). Validation: matched-universe assert (U21 = 9 G10 + 12 EM option-covered names),
+  no-lookahead truncation recompute for `realized_skew_panel` and the SRP weight panel, and
+  reconciliation of the ALL-27 inv-vol-net Sharpe to the committed Stage-4 0.4659 (Δ < 1e-3).
+- Matched universe **U21** = tradable-27 ∩ RR coverage = AUD CAD CHF EUR GBP JPY NOK NZD SEK · BRL
+  CNH HUF ILS INR KRW MXN PLN SGD THB TRY ZAR (drops the six optionless EM CLP/COP/IDR/MYR/PEN/PHP;
+  CNH from 2011).
+
+**Results** (matched 21-name universe, quintile inv-vol, vol-targeted 10%, **net** of costs; NW alpha
+vs the *matched* vanilla carry):
+
+| track | net Sharpe | MaxDD | CVaR₉₉ | skew | turnover | cost drag | α vs carry | t |
+|---|---|---|---|---|---|---|---|---|
+| **U21 vanilla carry** (anchor) | **0.496** | −0.26 | 3.0% | −0.73 | 0.47 | 1.4% | — | — |
+| (a) implied skew, long high RR | 0.13 | −0.51 | 3.5% | −1.07 | 1.05 | 2.3% | −2.8% | −1.6 |
+| (b) carry tilted toward crash (blendhi) | 0.15 | −0.47 | 3.3% | −0.91 | 0.73 | 1.6% | −3.3% | **−2.8** |
+| (b) carry tilted away (blendlo) | −0.21 | −0.56 | 2.7% | −0.05 | 1.45 | 3.2% | −3.2% | −1.2 |
+| (c) clean carry (Jurek) | −0.03 | −0.42 | 2.9% | −0.48 | 1.17 | 2.7% | −2.9% | −1.2 |
+| (d) SRP (Li–Sarno–Zinna) | −0.09 | −0.49 | 2.7% | −0.48 | 1.28 | 2.7% | −3.3% | −1.5 |
+| ALL-27 vanilla carry (reconciliation) | 0.466 | −0.29 | 2.9% | −0.65 | 0.68 | 1.8% | +0.0% | 0.1 |
+
+**SRP-vs-carry spanning** (U21 unit long/short factor books, gross returns, NW 5 lags):
+
+| regression | α (ann) | t(α) | β | t(β) | R² |
+|---|---|---|---|---|---|
+| SRP ~ CARRY | −0.5% | −0.38 | 0.29 | 10.2 | 0.16 |
+| CARRY ~ SRP | +3.8% | **+2.19** | 0.57 | 13.2 | 0.16 |
+
+**Verdict — REJECT (null).** No option-implied-skew variant beats the matched vanilla carry (0.496),
+let alone the published bars (0.466 / 0.457); every net alpha vs carry is negative (blendhi
+significantly so, t −2.8). The contested RR direction settles weakly for Farhi–Gabaix (long high RR
+is positive but a fraction of carry, no alpha); the Brunnermeier "avoid expensive insurance" tilt is
+the worst book. Clean carry collapses under dollar-neutrality, exactly as Jurek warns. The flagship
+**SRP fails in both directions, and the Li–Sarno–Zinna spanning claim reverses on this sample: SRP
+earns zero alpha over carry (t −0.4) while carry keeps a significant alpha over SRP (t +2.2) — here
+carry subsumes SRP, not the other way.** Robustness: a 126d-skew SRP is likewise negative (−0.03), so
+this is not a window artefact. The option surface's explicit crash-risk pricing is real (Stage 2) but
+not a tradable edge over the simple book — this *sharpens* rather than overturns the project
+through-line. **D1 adds no signal; the honest null is the deliverable.**
+
+**Outputs:** `skew_carry_comparison.csv`, `srp_carry_spanning.csv`, `skew_track_correlation.csv`
+(Appendix A).
+
+**Phase-3 status after D1:** D1 done (null). Next differentiators — **D3** (cross-currency basis /
+dollar funding, feasible today) and **D2** (FX vol risk premium) — remain open; the D1 null already
+earns a place in the §14.3 report as evidence that the crash-risk thread, though economically real,
+is not tradable alpha.
+
 ---
 
 ## Appendix A — Output artifact registry
@@ -650,6 +708,9 @@ in the Phase-3 finding.
 | `regime_series.csv` | regime_analysis §5 | daily per-indicator percentile ranks + composite + Low/Moderate/Crisis label |
 | `stage6_regime_stats.csv` | regime_analysis §5 | 7 allocation variants (static/voltgt/vix/rrccy/reg_half/reg_off/reg_mod) × gross/net: full metrics, IR, turnover, cost drag, NW alpha vs voltgt |
 | `stage6_conditional_by_regime.csv` | regime_analysis §5 | vol-targeted book's return/vol/Sharpe/skew/P&L-share by regime, with n_days |
+| `skew_carry_comparison.csv` | skew_carry §3 (D1) | option-implied-skew battery (iskew/blendhi/blendlo/clean/srp + srp126, matched U21) + ALL-27 carry reconciliation × gross/net: full metrics, IR, turnover, cost drag, NW alpha vs matched carry |
+| `srp_carry_spanning.csv` | skew_carry §4 (D1) | SRP-vs-carry spanning both ways (α/β/t/R²): carry subsumes SRP, not vice versa |
+| `skew_track_correlation.csv` | skew_carry §6 (D1) | correlation matrix of the net daily D1 tracks |
 
 **Planned:** `stage7_ml_forecast_eval.csv` +
 `stage7_ml_strategy_stats.csv` (§13) · `final_comparison.csv` (§14.2).
@@ -664,6 +725,21 @@ in the Phase-3 finding.
 - Fama (1984), *Forward and Spot Exchange Rates*.
 - Ledoit & Wolf (2004), covariance shrinkage.
 - López de Prado (2018), *Advances in Financial Machine Learning* (purged walk-forward CV).
+
+**Phase 3 / D1 — crash-risk-premium-adjusted carry** (crash risk explains only *part* of carry; tilt,
+don't neutralize; RR direction is contested; the SRP-subsumes-carry claim is the key hypothesis — and
+it did **not** replicate here, see §17.1):
+- Jurek (2014), *Crash-Neutral Currency Carry Trades* — `papers/jurek_currency.pdf`. Crash-hedging
+  removes ≤35% of the carry return; fully crash-neutralizing + dollar-neutral + including 2008 → ~zero.
+- Farhi & Gabaix (2016), *Rare Disasters and Exchange Rates* — `papers/rare_disasters_and_exchange_rates`.
+- Farhi, Fraiberger, Gabaix, Rancière, Verdelhan, *Crash Risk in Currency Markets* — SSRN 1397668.
+  Disaster risk ≈ one-third of the G10 carry premium; RR ∝ the currency risk premium.
+- Broll (2016), *The Skewness Risk Premium in Currency Markets* — SSRN 2775663.
+- Li, Sarno & Zinna (2023), *Skewness Risk Premium* — SSRN 4580189. SRP = physical − risk-neutral
+  (model-free) skewness; claims SRP subsumes carry. **Single-source spanning claim; falsified on our
+  2007–2026 21-name panel (§17.1) — carry subsumes SRP.**
+- Della Corte et al., *Volatility Risk Premia and Exchange Rate Predictability* — SSRN 2892114 (Phase-3
+  direction D2, parked).
 
 ## Appendix C — Corrections vs the original plan
 

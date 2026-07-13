@@ -146,6 +146,27 @@ def momentum_panel(xret: pd.DataFrame, lookback: int = 63, skip: int = 0) -> pd.
     return mom.shift(skip) if skip else mom
 
 
+def realized_skew_panel(returns: pd.DataFrame, window: int = 252,
+                        min_periods: int | None = None) -> pd.DataFrame:
+    """Trailing realised (physical) skewness of daily returns, one column per currency.
+
+    The signal at each day is the sample skewness of the last `window` daily
+    returns — the physical-measure crash asymmetry a long-FX position has
+    actually experienced, the realised counterpart to the option-implied skew in
+    `implied_skew_panel`. Fed the daily `excess_returns` panel (the `xret`
+    convention) so the skewness reflects the tradable carry-inclusive return;
+    negative = crash-prone (fat left tail). `window` defaults to 252d (≈1y): third
+    moments are noisy, so the skewness literature (Amaya et al. 2015; Li, Sarno &
+    Zinna 2023) uses long estimation windows, and `min_periods` defaults to
+    window // 2 (the library's warm-up convention). Trailing windows only, so no
+    lookahead by construction — consumed exactly like `momentum_panel`, sampled
+    month-end and shifted one day downstream so the effective signal never sees
+    its own or future days.
+    """
+    mp = window // 2 if min_periods is None else min_periods
+    return returns.rolling(window, min_periods=mp).skew()
+
+
 # ---------------------------------------------------------------------------
 # Performance statistics
 # ---------------------------------------------------------------------------
@@ -239,6 +260,43 @@ def zscore_xs(panel: pd.DataFrame) -> pd.DataFrame:
     downstream `carry_portfolio` still samples month-end and shifts one day.
     """
     return panel.sub(panel.mean(axis=1), axis=0).div(panel.std(axis=1), axis=0)
+
+
+def xs_residual(y: pd.DataFrame, x: pd.DataFrame, add_const: bool = True) -> pd.DataFrame:
+    """Cross-sectional residual of panel `y` regressed on panel `x`, per date.
+
+    Each row (date) is an independent OLS of the currencies' `y` values on their
+    `x` values — with an intercept unless add_const=False — and the returned panel
+    holds the residuals y - y_hat, i.e. the part of `y` orthogonal to `x` in the
+    cross-section. Used to build "clean carry": carry stripped of the component
+    the option-implied crash skew explains (Jurek 2014, "Crash-Neutral Currency
+    Carry Trades"), then sorted like raw carry. `x` is aligned to `y`'s calendar
+    (reindexed to y.index), so the residual panel lives on y's dates. Only
+    currencies with both values present on a date enter that date's fit; a date
+    with fewer than 3 valid names,
+    or with no cross-sectional variation in `x`, yields NaNs. Row-wise and
+    stateless like `zscore_xs`, so it introduces no lookahead; the downstream
+    `carry_portfolio` still samples month-end and shifts one day.
+    """
+    cols = y.columns.intersection(x.columns)
+    Y = y[cols].to_numpy(dtype=float)
+    X = x.reindex(y.index)[cols].to_numpy(dtype=float)
+    mask = np.isfinite(Y) & np.isfinite(X)
+    Xm, Ym = np.where(mask, X, np.nan), np.where(mask, Y, np.nan)
+    n = mask.sum(axis=1)
+    safe_n = np.where(n > 0, n, 1)
+    if add_const:
+        xd = Xm - (np.nansum(Xm, axis=1) / safe_n)[:, None]
+        yd = Ym - (np.nansum(Ym, axis=1) / safe_n)[:, None]
+    else:
+        xd, yd = Xm, Ym
+    sxx = np.nansum(xd * xd, axis=1)
+    sxy = np.nansum(xd * yd, axis=1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        beta = sxy / sxx
+    resid = yd - beta[:, None] * xd
+    resid[(n < 3) | (sxx == 0) | ~np.isfinite(sxx)] = np.nan
+    return pd.DataFrame(resid, index=y.index, columns=cols)
 
 
 def carry_hml_factor(xret: pd.DataFrame, carry_ann: pd.DataFrame) -> pd.Series:
@@ -816,3 +874,30 @@ def vol_surface_panel(kind: str = "ATM", tenor: str = "1M", delta: int = 25) -> 
             s = -s  # FX-first pair: RR = FX-call minus FX-put -> flip to crash-positive
         out[ccy] = s
     return pd.DataFrame(out)
+
+
+def implied_skew_panel(tenor: str = "1M", delta: int = 25,
+                       standardize: bool = True) -> pd.DataFrame:
+    """Option-implied crash skew per currency from the risk reversal.
+
+    The 25-delta risk reversal is the market price of the smile's slope — how much
+    richer out-of-the-money FX puts are than calls — and is the first-order,
+    model-free read on the risk-neutral skewness of each currency vs USD. Built on
+    `vol_surface_panel("RR")`, already sign-normalised crash-positive: positive =
+    puts rich = the market pricing a fat left tail (crash) for a long-FX carry
+    position, so it is the *negative* of the risk-neutral skewness. If
+    `standardize` (default) the RR is divided by the ATM vol
+    (`vol_surface_panel("ATM")`) to give the dimensionless "smile skew" RR/ATM
+    (Malz 1997), comparable across currencies on very different vol levels; the
+    ATM-scaled slope preserves the cross-sectional ranking the sort relies on. A
+    full Bakshi-Kapadia-Madan model-free skewness would need the whole strike
+    chain, which the 3-point (ATM/RR/BF) surface here does not provide. Purely
+    contemporaneous per date, so it introduces no lookahead — consumed like
+    `carry_panel`, sampled month-end and shifted one day downstream.
+    """
+    rr = vol_surface_panel("RR", tenor=tenor, delta=delta)
+    if not standardize:
+        return rr
+    atm = vol_surface_panel("ATM", tenor=tenor)
+    common = rr.columns.intersection(atm.columns)
+    return rr[common] / atm[common].replace(0.0, np.nan)
