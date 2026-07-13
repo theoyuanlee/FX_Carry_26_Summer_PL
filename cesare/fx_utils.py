@@ -2,7 +2,7 @@
 
 Data loading, currency-return construction (spot and forward-implied carry),
 performance statistics and factor regressions. Used by the notebooks in
-notebooks/ and, later, by the strategy backtests.
+cesare/ and, later, by the strategy backtests.
 """
 
 from pathlib import Path
@@ -42,7 +42,7 @@ FWD_ROOT.update({
 # (outright forward = spot + points / scale). Verified empirically: with
 # these scales the median implied 12M carry per currency lines up with the
 # known interest-rate differential vs USD (see the validation table in
-# notebooks/data_visualization.ipynb).
+# cesare/data_visualization.ipynb).
 FWD_SCALE = {ccy: 1e4 for ccy in ALL_CCY}
 FWD_SCALE.update({
     "JPY": 1e2, "HUF": 1e2, "INR": 1e2, "THB": 1e2,

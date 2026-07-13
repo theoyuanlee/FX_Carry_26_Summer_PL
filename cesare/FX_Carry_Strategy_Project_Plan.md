@@ -2,7 +2,7 @@
 
 *Author: Cesare Bavaresco · UChicago Summer Project Lab with Bank of America (Corporate Treasury / Global Funding).*
 *Data: daily Bloomberg, 2007-01 → 2026-06, G10 + EM currencies vs USD.*
-*Last updated: 2026-07-10.*
+*Last updated: 2026-07-13.*
 *Status legend: ✅ done · 🔶 partial · ⬜ not started.*
 
 This document replaces the original generic project outline. It is now git-tracked and serves as the
@@ -118,7 +118,7 @@ Stage dashboard:
 | 5. Momentum overlay | ✅ | `cesare/momentum_overlay.ipynb`; `fx_utils.momentum_panel`, `zscore_xs`, `carry_portfolio(filter_signal=)`; backtest §3 MOM factor | `stage5_momentum_comparison.csv`, `stage5_track_correlation.csv` |
 | 6. Regime analysis | ✅ | `cesare/regime_analysis.ipynb`; `fx_utils.regime_classify` | `regime_series.csv`, `stage6_regime_stats.csv`, `stage6_conditional_by_regime.csv` |
 | 7. ML extension (optional) | ⬜ | — | — |
-| Final evaluation & report | 🔶 | §14.1 metrics ✅ done; report not started | regenerated stats CSVs |
+| Final evaluation & report | 🔶 | §14.1 metrics ✅; repo hygiene ✅ (cesare/, §14.4); §14.2 table + §14.3 report not started | regenerated stats CSVs; `README.md`, `requirements.txt` |
 
 ## 5. Data & Infrastructure — Stage 0 ✅
 
@@ -539,31 +539,55 @@ guardrails · 4. Baseline results, incl. the G10-vs-EM finding · 5. Return driv
 (10. ML, if done) · 11. Conclusions & recommendations framed for a Corporate Treasury / Global
 Funding audience.
 
-### 14.4 Repo hygiene checklist
+### 14.4 Repo hygiene checklist ✅ (cesare/ pass done 2026-07-13)
 
-- [ ] **README.md** (currently a one-line stub): project summary, headline table, repo map, setup
-      (terminal only needed for data refresh — parquet snapshots are tracked), how to run the
-      notebooks, link to this plan.
-- [ ] **requirements.txt**: pandas, numpy, pyarrow (pip build — see §5.2 note), statsmodels,
-      matplotlib, openpyxl, jupyter; scikit-learn/xgboost when Stage 7 starts. Separate optional
-      `requirements-bbg.txt` for xbbg/blpapi (Bloomberg's package index).
-- [x] **.gitignore**: plan-file exclusion removed (this document is now tracked).
-- [ ] Fix stale `fx_utils` module docstring ("notebooks in `notebooks/`" — they live in
-      `cesare/`); decide fate of legacy `notebooks/view_data.ipynb` (keep-as-scratch or delete).
+Repo-hygiene pass **scoped to `cesare/` only** (this is a multi-person repo — siblings `theo/`,
+`dafu/`, plus shared `notebooks/`/`src/`/`data/` at root). The `README.md` and `requirements.txt`
+are written to be self-contained for `cesare/` now **and** to collate LATER into ONE repo-wide
+pair, with shared-vs-cesare-unique items flagged for easy dedup. Left uncommitted per the
+no-git-ops rule (suggested commit: `docs(cesare): add README + requirements.txt, fix stale
+fx_utils docstring paths`).
+
+- [x] **`cesare/README.md`** — created: overview + the EM-carry finding (every overlay incl.
+      Phase-3 D1 fails to beat the simple book), folder map, notebook→stage→output table (mirrors
+      Appendix A), `fx_utils` API summary (panel chain + helper groups), setup/run + the shared
+      `../data/raw/` dependency, a scope & collation note (shared vs unique), and the §6
+      reproducibility conventions. Links to this plan as source of truth.
+- [x] **`cesare/requirements.txt`** — created: only what `cesare/` actually imports (grepped) —
+      numpy, pandas, scipy, statsmodels, pyarrow (indirect via `pd.read_parquet`; pip-over-conda
+      caveat inline, §5.2), matplotlib, seaborn (cesare-unique — only `data_visualization.ipynb`)
+      — plus the notebook runtime (jupyter, ipykernel, nbformat). Loose `>=` pins with dev versions
+      in comments, grouped SHARED/UNIQUE. Deliberately **excluded** unused-but-installed libs
+      (scikit-learn, plotly, tqdm, openpyxl, fastparquet); scikit-learn/xgboost join only if Stage 7
+      starts. `openpyxl` belongs to `src/convert_extra_xlsx.py`, and the optional `requirements-bbg.txt`
+      (xbbg/blpapi) covers the `src/` Bloomberg pull — both **outside `cesare/`**, deferred to the
+      repo-wide collation.
+- [x] **.gitignore** — no folder-local `cesare/.gitignore` needed: the root `.gitignore` already
+      ignores `__pycache__/`, `.ipynb_checkpoints/`, `.DS_Store` repo-wide and nothing under
+      `cesare/` is mis-tracked (the `__pycache__` build cache is untracked). Plan-file exclusion was
+      already removed (this document is tracked).
+- [x] **Stale `fx_utils` docstring fixed** — module docstring `notebooks/`→`cesare/`, and the
+      `FWD_SCALE` comment `notebooks/data_visualization.ipynb`→`cesare/data_visualization.ipynb`;
+      the `src/convert_extra_xlsx.py` reference is correct and left as-is. `import fx_utils` verified
+      clean; no behaviour change.
+- [ ] **Deferred (not blocking):** decide the fate of legacy `notebooks/view_data.ipynb`
+      (keep-as-scratch or delete) — it lives in the shared `notebooks/` folder, outside this
+      cesare/-scoped pass. Repo-wide collation of the per-person READMEs/requirements happens once
+      every teammate has done their own folder.
 
 ## 15. Sequencing, Dependencies & Effort
 
 | # | Work item | Depends on | Effort | Why here |
 |---|---|---|---|---|
 | 1 | §14.1 metrics + regenerate CSVs ✅ | — | 0.5 d | Every later comparison consumes these |
-| 2 | §14.4 hygiene (README, requirements) | — | 0.5 d | Cheap; makes the repo presentable now |
+| 2 | §14.4 hygiene (README, requirements) ✅ | — | 0.5 d | Done for cesare/ (2026-07-13); repo-wide collation later |
 | 3 | Stage 3 completion ✅ | 1 | 1 d | Mostly assembles existing pieces; closes the first 🔶 |
 | 4 | Stage 5 momentum ✅ | 1 | 1.5 d | Feeds Stage 6 conditional stats and Stage 7 features |
 | 5 | Stage 4 weighting comparison ✅ | 1 | 1.5–2 d | Independent — parallelizable with #4 |
 | 6 | Stage 6 regimes ✅ | 3, 4 | 1.5 d | Generalizes the Stage-3 threshold rule |
 | 7 | **Phase 3 — novel edge (§17)** ← next | 4, 5, 6 | 4–6 wk | The main event: a differentiated signal that beats the simple book |
 | 8 | Stage 7 ML (optional) | 7 | 2–3 d | Back pocket; only if Phase-3 signals warrant it |
-| 9 | §14.4 hygiene + §14.2 final table + §14.3 report | all above | 2–3 d | Terminal deliverable; folds in the Phase-3 result |
+| 9 | §14.2 final table + §14.3 report + repo-wide collation | all above | 2–3 d | Terminal deliverable; folds in the Phase-3 result (cesare/ §14.4 hygiene already done) |
 
 Key dependency edges: metrics → everything; momentum → regime stats → ML features; the Stage-3
 verdict shapes the Stage-6 design (the regime rule must beat the binary hedge). **Phase 3 (§17) is
@@ -772,6 +796,3 @@ it did **not** replicate here, see §17.1):
 11. **Narrative correction.** The original implicitly assumes carry works in the majors; over
     2007–2026 the premium is EM (combined 7.0%/yr Sharpe 0.63 vs G10 1.9%/yr 0.17; DBHVG10U
     negative over the sample). The executive summary leads with this finding.
-
-
-push
