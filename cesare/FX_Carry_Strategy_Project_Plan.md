@@ -605,7 +605,7 @@ regime-aware exposure management.
 
 ---
 
-## 17. Phase 3 — Beyond Vanilla EM Carry: Toward a Novel Edge (Jul–Aug 2026) 🔶 ← current focus (D1 ✅ null)
+## 17. Phase 3 — Beyond Vanilla EM Carry: Toward a Novel Edge (Jul–Aug 2026) 🔶 ← current focus (D1 ✅ null · D3 ✅ null)
 
 **Why.** Stages 1–6 produced a clean but unsurprising result: the 2007–2026 carry premium is an EM
 phenomenon, and every *standard* embellishment — crash hedges (St3), portfolio optimization (St4),
@@ -699,9 +699,88 @@ through-line. **D1 adds no signal; the honest null is the deliverable.**
 (Appendix A).
 
 **Phase-3 status after D1:** D1 done (null). Next differentiators — **D3** (cross-currency basis /
-dollar funding, feasible today) and **D2** (FX vol risk premium) — remain open; the D1 null already
-earns a place in the §14.3 report as evidence that the crash-risk thread, though economically real,
-is not tradable alpha.
+dollar funding, feasible today) and **D2** (FX vol risk premium) — were next up (**D3** is now done
+below, §17.2 — also null); the D1 null already earns a place in the §14.3 report as evidence that the
+crash-risk thread, though economically real, is not tradable alpha.
+
+### 17.2 D3 — Cross-Currency Basis / Dollar-Funding Carry ✅ (Jul 2026) — **null**
+
+**Status:** done. A cross-currency-basis battery — a funding-stress **conditioner** *and* a
+**cross-sectional signal** — built on the matched 7-name basis universe and falsified against both
+bars. Result: **null** — a valid deliverable, and a decisive one: on the only universe where the basis
+is measurable here, carry itself is uncompensated.
+
+**What exists:**
+- Helper in `fx_utils.py`: `basis_stress_index` (aggregate dollar-funding-stress gauge from the
+  cross-currency-basis panel; default `zmean` = mean of per-name trailing z-scores, negated, so a
+  single wide-basis name like TRY cannot dominate — so defined the index peaks at Lehman-2008 and the
+  COVID-2020 dollar squeeze). No-lookahead, citation-dense (Du–Tepper–Verdelhan 2018;
+  Avdjiev–Du–Koch–Shin 2019; Brunnermeier–Nagel–Pedersen 2009). Everything else *reuses* the engine:
+  `cip_basis = carry_panel − interest_diff_vs_usd` is an identity (verified max err 8e-17), so the
+  basis, the onshore-rate carry (= carry − basis), the tilts and the orthogonalized carry are all
+  compositions of existing functions.
+- Notebook `cesare/basis_carry.ipynb` (setup → signals → tracks → stats → spanning → validation →
+  outputs → verdict). Validation: matched-universe assert (U7), no-lookahead truncation recompute for
+  `cip_basis`, the conditioner scalar *and* the basis weight panel, and reconciliation of the ALL-27
+  inv-vol-net Sharpe to the committed Stage-4 0.4659 over the full window (Δ = 0.00000).
+- Matched universe **U7** = tradable-27 ∩ `cip_basis` (onshore-fixing) coverage = CNH HUF ILS INR PLN
+  THB TRY (7 EM names; **no G10** — the basis needs onshore fixings, so the G10 dollar-funding basis
+  DTV studied is out of reach with this engine). Two structural caveats: the onshore fixings **end
+  2024-09**, so every basis-dependent track is evaluated on **2007-05 → 2024-09** (the ALL-27 baseline
+  is reconciled to the committed number over the full 2007-05 → 2026-06 window separately); and this
+  universe is *entirely* restricted/convertibility-constrained EM.
+
+**Results** (matched 7-name EM universe, tercile inv-vol, vol-targeted 10%, **net** of costs; NW alpha
+vs the *matched* vanilla carry; 2007-05 → 2024-09):
+
+| track | net Sharpe | MaxDD | CVaR₉₉ | skew | turnover | cost drag | α vs carry | t |
+|---|---|---|---|---|---|---|---|---|
+| **U7 vanilla carry** (anchor) | **−0.32** | −0.72 | 3.0% | −0.29 | 0.45 | 1.8% | — | — |
+| (a) basis-sorted | −0.13 | −0.54 | 3.0% | −0.11 | 1.14 | 3.4% | −0.9% | −0.3 |
+| (b) onshore-rate carry (= carry − basis) | −0.41 | −0.74 | 2.9% | −0.35 | 0.23 | 1.3% | −1.5% | −1.2 |
+| (c) carry tilted toward rich basis (tilthi) | −0.17 | −0.67 | 3.3% | −0.73 | 0.95 | 2.8% | +0.9% | +0.5 |
+| (c) carry tilted toward dollar-shortage (tiltlo) | −0.69 | −0.83 | 3.0% | −0.61 | 0.77 | 2.3% | −5.7% | **−2.8** |
+| (d) clean carry (carry ⟂ basis) | −0.20 | −0.62 | 2.7% | −0.59 | 0.77 | 2.2% | +0.7% | +0.5 |
+| conditioner on ALL-27 (basis funding-stress de-risk) | 0.31 | −0.28 | 2.8% | −0.67 | 0.69 | 1.7% | +0.4%¹ | +0.8¹ |
+| ALL-27 vanilla carry (2007–24 subsample) | 0.28 | −0.29 | 2.9% | −0.62 | 0.66 | 1.7% | — | — |
+
+¹ conditioner α/t are vs the *un-conditioned* ALL-27 book (its natural comparator); the same book
+reconciles to the committed 0.4659 over the full 2007-05 → 2026-06 window (§5 guard, Δ = 0.00000).
+
+**Basis-vs-carry spanning** (U7 unit long/short factor books, gross returns, NW 5 lags):
+
+| regression | α (ann) | t(α) | β | t(β) | R² |
+|---|---|---|---|---|---|
+| BASIS ~ CARRY | +1.6% | +0.66 | 0.24 | 2.84 | 0.05 |
+| CARRY ~ BASIS | −0.8% | −0.34 | 0.20 | 2.67 | 0.05 |
+| ONSHORE ~ CARRY | −0.6% | −0.45 | 0.89 | 41.6 | 0.71 |
+
+**Verdict — REJECT (null).** The basis is only measurable where onshore fixings exist, which confines
+the tradable universe to 7 restricted EM names — and on that universe the matched vanilla carry book is
+itself **negative** (−0.32), miles below both published bars (0.466 / 0.457). Every basis variant is
+also negative; only `tiltlo` (chasing the most dollar-short names — Du's "shortage pays") is
+*significantly* worse (t −2.8). Cross-sectionally the basis adds nothing that clears the bar, and the
+two-way spanning is a non-result on a universe too weak to span or be spanned (both |t| < 0.7); the
+onshore-rate carry is a near-clone of the forward carry (β 0.89, R² 0.71), so the basis is a small,
+non-priced increment — exactly what the `carry = onshore + basis` identity implies. As a conditioner
+the basis-derived funding-stress index does light up at Lehman-2008 and the COVID-2020 dollar squeeze
+(it measures what DTV/Avdjiev say it does), but halving ALL-27 exposure in its top quintile lifts the
+book only 0.28 → 0.31 with insignificant alpha (t +0.8) and stays far under 0.466 — the same verdict
+Stage-6 regime-timing reached with VIX/vol/EMBI. Robustness: the negative anchor is a TRY-lira-crisis
+artefact (drop TRY → +0.27, still far below the bars; drop CNH → −0.28), the null holds at the 3M tenor
+(carry −0.32, basis-sort +0.07), and the conditioner is null across all four stress methods (0.27–0.33).
+The cross-currency basis is economically real — literally the Global-Funding desk's language — but
+**not** a tradable carry edge on the only universe where it is observable here. **D3 adds no signal; the
+honest null is the deliverable**, reinforcing the through-line that every embellishment, standard *and*
+novel, fails to beat the simple book.
+
+**Outputs:** `basis_carry_comparison.csv`, `basis_carry_spanning.csv`, `basis_track_correlation.csv`
+(Appendix A).
+
+**Phase-3 status after D3:** D1 and D3 both done (both null). The last open Phase-3 differentiator is
+**D2** (FX vol risk premium); D4–D6 need a data add first. Two independent *novel* signals
+(option-implied skew, cross-currency basis) now join the four *standard* embellishments in failing to
+beat the simple vol-targeted EM-carry book — the §14.3 report's central, well-evidenced result.
 
 ---
 
@@ -735,6 +814,9 @@ is not tradable alpha.
 | `skew_carry_comparison.csv` | skew_carry §3 (D1) | option-implied-skew battery (iskew/blendhi/blendlo/clean/srp + srp126, matched U21) + ALL-27 carry reconciliation × gross/net: full metrics, IR, turnover, cost drag, NW alpha vs matched carry |
 | `srp_carry_spanning.csv` | skew_carry §4 (D1) | SRP-vs-carry spanning both ways (α/β/t/R²): carry subsumes SRP, not vice versa |
 | `skew_track_correlation.csv` | skew_carry §6 (D1) | correlation matrix of the net daily D1 tracks |
+| `basis_carry_comparison.csv` | basis_carry §3 (D3) | cross-currency-basis battery (basis/onshore/tilthi/tiltlo/clean, matched U7) + ALL-27 carry & basis-funding-stress conditioner × gross/net: full metrics, IR, turnover, cost drag, NW alpha vs matched carry (basis window 2007-05→2024-09) |
+| `basis_carry_spanning.csv` | basis_carry §4 (D3) | basis-vs-carry spanning both ways + onshore≈carry (α/β/t/R²): neither spans the other on the weak U7 universe |
+| `basis_track_correlation.csv` | basis_carry §6 (D3) | correlation matrix of the net daily D3 tracks |
 
 **Planned:** `stage7_ml_forecast_eval.csv` +
 `stage7_ml_strategy_stats.csv` (§13) · `final_comparison.csv` (§14.2).
@@ -764,6 +846,27 @@ it did **not** replicate here, see §17.1):
   2007–2026 21-name panel (§17.1) — carry subsumes SRP.**
 - Della Corte et al., *Volatility Risk Premia and Exchange Rate Predictability* — SSRN 2892114 (Phase-3
   direction D2, parked).
+
+**Phase 3 / D3 — cross-currency basis / dollar funding** (post-2008 CIP fails; the basis is the
+dollar-funding premium, positively correlated with the rate level in the cross-section — so a basis
+sort points the *same* way as carry, making the spanning test decisive; tested here as both a
+funding-stress conditioner and a cross-sectional signal — **null** on the 7-name onshore-fixing EM
+universe, see §17.2):
+- Du, Tepper & Verdelhan (2018), *Deviations from Covered Interest Rate Parity* — Journal of Finance;
+  NBER WP 23170. Large, persistent post-2008 CIP deviations from intermediary/balance-sheet costs; the
+  basis is positively correlated with nominal rates in the cross-section (high-rate ⇒ higher basis), and
+  the CIP-arb allocation (borrow high-rate / lend low-rate, hedged) is the *opposite* of the carry trade.
+- Avdjiev, Du, Koch & Shin (2019), *The Dollar, Bank Leverage, and Deviations from Covered Interest
+  Parity* — AER: Insights; BIS WP 592. The dollar / bank-leverage / CIP-basis "triangle": a stronger
+  broad dollar co-moves with a wider (more negative) basis — the aggregate basis as a funding-stress gauge.
+- Cenedese, Della Corte & Wang (2021), *Currency Mispricing and Dealer Balance Sheets* — Journal of
+  Finance; SSRN 3335265. The basis is priced by dealer balance-sheet constraints (leverage-ratio shock ≈
+  +20bps synthetic-dollar premium).
+- Borio, McCauley, McGuire & Sushko (2016), *Covered Interest Parity Lost: Understanding the
+  Cross-Currency Basis* — BIS Quarterly Review. Hedging demand + tighter bank balance sheets sustain the
+  basis; the reference framing of the post-crisis basis.
+- Brunnermeier, Nagel & Pedersen (2008/2009), *Carry Trades and Currency Crashes* (above) — the
+  funding-liquidity channel that motivates a basis-stress *conditioner*.
 
 ## Appendix C — Corrections vs the original plan
 

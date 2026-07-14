@@ -433,6 +433,45 @@ def cip_basis(g10_px: pd.DataFrame, em_px: pd.DataFrame, tenor: str = "3M",
     return (carry[common] - diff[common]).dropna(how="all")
 
 
+def basis_stress_index(basis: pd.DataFrame, method: str = "zmean",
+                       window: int = 252) -> pd.Series:
+    """Aggregate dollar-funding-stress gauge from the cross-currency-basis panel.
+
+    A time-series proxy for how scarce/expensive synthetic USD funding is:
+    higher = more stress. When dollar funding tightens, the (NDF-heavy EM) basis
+    widens negative, so the index rises. Motivated by the dollar / bank-leverage /
+    CIP-basis "triangle" of Avdjiev, Du, Koch & Shin (2019) and the CIP-deviation
+    intermediary story of Du, Tepper & Verdelhan (2018); as a carry de-risking
+    conditioner it operationalises the funding-liquidity channel of Brunnermeier,
+    Nagel & Pedersen (2009). `method` sets how the cross-section is aggregated:
+    - "zmean" (default): mean over names of each currency's trailing-`window`
+      z-score of the basis, negated. Standardising per name first stops a single
+      wide-basis currency (e.g. TRY, whose basis averages ~+370bps here) from
+      dominating and isolates common funding pressure -- so defined, the index
+      peaks at Lehman (2008-09) and the COVID dollar squeeze (2020-12).
+    - "mean"/"median": negated cross-sectional mean / (outlier-robust) median.
+    - "worst": negated cross-sectional min (the single most-stressed name).
+    No lookahead: a contemporaneous (trailing-window for "zmean") aggregate of
+    `basis`, consumed like any signal -- sampled month-end and shifted one day
+    downstream by exposure_scalar / vol_target_weights. Units follow `basis`
+    (annualised decimals) except "zmean", which is unitless; either way only the
+    trailing-percentile rank enters exposure_scalar, so the scale is immaterial.
+    """
+    if method not in ("zmean", "mean", "median", "worst"):
+        raise ValueError(f"method must be one of zmean/mean/median/worst, got {method!r}")
+    if method == "zmean":
+        mu = basis.rolling(window, min_periods=window // 4).mean()
+        sd = basis.rolling(window, min_periods=window // 4).std()
+        idx = -((basis - mu) / sd).mean(axis=1)
+    elif method == "mean":
+        idx = -basis.mean(axis=1)
+    elif method == "median":
+        idx = -basis.median(axis=1)
+    else:
+        idx = -basis.min(axis=1)
+    return idx.rename("basis_stress")
+
+
 def load_benchmarks() -> pd.DataFrame:
     """Carry benchmark index levels (DBHVG10U, FXCTEM8, DBHVBUSI)."""
     return load_wide("fx_carry_benchmarks")
