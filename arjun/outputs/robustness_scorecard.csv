@@ -1,0 +1,7 @@
+axis,value,note
+Full-sample net Sharpe (baseline),0.466,the headline number under audit
+Recent-window Sharpe (2019+),0.879,is the edge still alive lately?
+Most-carrying currency,JPY,removing it changes Sharpe by -0.086
+Parameter plateau (window x rebal),0.12-0.50,net Sharpe range across the grid
+Cost multiple that kills edge,5.0,x historical spreads before net Sharpe <= 0
+Max drawdown,-29.3%,trough 2021-12-16

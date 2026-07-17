@@ -2,7 +2,7 @@
 
 Data loading, currency-return construction (spot and forward-implied carry),
 performance statistics and factor regressions. Used by the notebooks in
-notebooks/ and, later, by the strategy backtests.
+cesare/ and, later, by the strategy backtests.
 """
 
 from pathlib import Path
@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
+from scipy.optimize import minimize  # only for mvo_weights (Stage 4); scipy ships with statsmodels
 
 RAW_DIR = Path(__file__).resolve().parent.parent / "data" / "raw"
 
@@ -41,7 +42,7 @@ FWD_ROOT.update({
 # (outright forward = spot + points / scale). Verified empirically: with
 # these scales the median implied 12M carry per currency lines up with the
 # known interest-rate differential vs USD (see the validation table in
-# notebooks/data_visualization.ipynb).
+# cesare/data_visualization.ipynb).
 FWD_SCALE = {ccy: 1e4 for ccy in ALL_CCY}
 FWD_SCALE.update({
     "JPY": 1e2, "HUF": 1e2, "INR": 1e2, "THB": 1e2,
@@ -127,6 +128,45 @@ def spot_log_returns(spots_usd: pd.DataFrame) -> pd.DataFrame:
     return np.log(spots_usd).diff()
 
 
+def momentum_panel(xret: pd.DataFrame, lookback: int = 63, skip: int = 0) -> pd.DataFrame:
+    """Trailing cumulative excess-return momentum signal, one column per currency.
+
+    The signal at each day is the sum of the last `lookback` daily excess returns
+    (spot move plus accrued carry, `excess_returns` convention) — not spot-only,
+    since the carry accrual is part of what a trend follower actually realises.
+    `lookback` in {21, 63, 252} spans the 1/3/12-month horizons of Burnside et al.
+    (2011) and Menkhoff et al. (2012b); `skip` (default 0) drops the most recent
+    `skip` days for the equity-style 12-2 gap, kept only for robustness checks as
+    the FX momentum literature does not use it. Returned as a daily panel, no
+    lookahead by construction (only past returns enter the trailing sum); it is
+    consumed exactly like `carry_panel` — `carry_portfolio` samples it month-end
+    and shifts one day, so the effective signal never sees its own or future days.
+    """
+    mom = xret.rolling(lookback, min_periods=lookback // 2).sum()
+    return mom.shift(skip) if skip else mom
+
+
+def realized_skew_panel(returns: pd.DataFrame, window: int = 252,
+                        min_periods: int | None = None) -> pd.DataFrame:
+    """Trailing realised (physical) skewness of daily returns, one column per currency.
+
+    The signal at each day is the sample skewness of the last `window` daily
+    returns — the physical-measure crash asymmetry a long-FX position has
+    actually experienced, the realised counterpart to the option-implied skew in
+    `implied_skew_panel`. Fed the daily `excess_returns` panel (the `xret`
+    convention) so the skewness reflects the tradable carry-inclusive return;
+    negative = crash-prone (fat left tail). `window` defaults to 252d (≈1y): third
+    moments are noisy, so the skewness literature (Amaya et al. 2015; Li, Sarno &
+    Zinna 2023) uses long estimation windows, and `min_periods` defaults to
+    window // 2 (the library's warm-up convention). Trailing windows only, so no
+    lookahead by construction — consumed exactly like `momentum_panel`, sampled
+    month-end and shifted one day downstream so the effective signal never sees
+    its own or future days.
+    """
+    mp = window // 2 if min_periods is None else min_periods
+    return returns.rolling(window, min_periods=mp).skew()
+
+
 # ---------------------------------------------------------------------------
 # Performance statistics
 # ---------------------------------------------------------------------------
@@ -208,6 +248,55 @@ def turnover(weights: pd.DataFrame, rebal: str = "ME") -> float:
 def dollar_factor(xret: pd.DataFrame) -> pd.Series:
     """DOL: equal-weighted long-all-currencies-vs-USD excess return (LRV)."""
     return xret.mean(axis=1).rename("DOL")
+
+
+def zscore_xs(panel: pd.DataFrame) -> pd.DataFrame:
+    """Cross-sectional z-score of a signal panel, standardised per date.
+
+    Each row (date) is demeaned and divided by its own cross-sectional standard
+    deviation across currencies, so signals on different natural scales — e.g.
+    annualised carry vs cumulative-return momentum — become comparable before
+    they are blended. Row-wise and stateless, so it introduces no lookahead; the
+    downstream `carry_portfolio` still samples month-end and shifts one day.
+    """
+    return panel.sub(panel.mean(axis=1), axis=0).div(panel.std(axis=1), axis=0)
+
+
+def xs_residual(y: pd.DataFrame, x: pd.DataFrame, add_const: bool = True) -> pd.DataFrame:
+    """Cross-sectional residual of panel `y` regressed on panel `x`, per date.
+
+    Each row (date) is an independent OLS of the currencies' `y` values on their
+    `x` values — with an intercept unless add_const=False — and the returned panel
+    holds the residuals y - y_hat, i.e. the part of `y` orthogonal to `x` in the
+    cross-section. Used to build "clean carry": carry stripped of the component
+    the option-implied crash skew explains (Jurek 2014, "Crash-Neutral Currency
+    Carry Trades"), then sorted like raw carry. `x` is aligned to `y`'s calendar
+    (reindexed to y.index), so the residual panel lives on y's dates. Only
+    currencies with both values present on a date enter that date's fit; a date
+    with fewer than 3 valid names,
+    or with no cross-sectional variation in `x`, yields NaNs. Row-wise and
+    stateless like `zscore_xs`, so it introduces no lookahead; the downstream
+    `carry_portfolio` still samples month-end and shifts one day.
+    """
+    cols = y.columns.intersection(x.columns)
+    Y = y[cols].to_numpy(dtype=float)
+    X = x.reindex(y.index)[cols].to_numpy(dtype=float)
+    mask = np.isfinite(Y) & np.isfinite(X)
+    Xm, Ym = np.where(mask, X, np.nan), np.where(mask, Y, np.nan)
+    n = mask.sum(axis=1)
+    safe_n = np.where(n > 0, n, 1)
+    if add_const:
+        xd = Xm - (np.nansum(Xm, axis=1) / safe_n)[:, None]
+        yd = Ym - (np.nansum(Ym, axis=1) / safe_n)[:, None]
+    else:
+        xd, yd = Xm, Ym
+    sxx = np.nansum(xd * xd, axis=1)
+    sxy = np.nansum(xd * yd, axis=1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        beta = sxy / sxx
+    resid = yd - beta[:, None] * xd
+    resid[(n < 3) | (sxx == 0) | ~np.isfinite(sxx)] = np.nan
+    return pd.DataFrame(resid, index=y.index, columns=cols)
 
 
 def carry_hml_factor(xret: pd.DataFrame, carry_ann: pd.DataFrame) -> pd.Series:
@@ -344,6 +433,45 @@ def cip_basis(g10_px: pd.DataFrame, em_px: pd.DataFrame, tenor: str = "3M",
     return (carry[common] - diff[common]).dropna(how="all")
 
 
+def basis_stress_index(basis: pd.DataFrame, method: str = "zmean",
+                       window: int = 252) -> pd.Series:
+    """Aggregate dollar-funding-stress gauge from the cross-currency-basis panel.
+
+    A time-series proxy for how scarce/expensive synthetic USD funding is:
+    higher = more stress. When dollar funding tightens, the (NDF-heavy EM) basis
+    widens negative, so the index rises. Motivated by the dollar / bank-leverage /
+    CIP-basis "triangle" of Avdjiev, Du, Koch & Shin (2019) and the CIP-deviation
+    intermediary story of Du, Tepper & Verdelhan (2018); as a carry de-risking
+    conditioner it operationalises the funding-liquidity channel of Brunnermeier,
+    Nagel & Pedersen (2009). `method` sets how the cross-section is aggregated:
+    - "zmean" (default): mean over names of each currency's trailing-`window`
+      z-score of the basis, negated. Standardising per name first stops a single
+      wide-basis currency (e.g. TRY, whose basis averages ~+370bps here) from
+      dominating and isolates common funding pressure -- so defined, the index
+      peaks at Lehman (2008-09) and the COVID dollar squeeze (2020-12).
+    - "mean"/"median": negated cross-sectional mean / (outlier-robust) median.
+    - "worst": negated cross-sectional min (the single most-stressed name).
+    No lookahead: a contemporaneous (trailing-window for "zmean") aggregate of
+    `basis`, consumed like any signal -- sampled month-end and shifted one day
+    downstream by exposure_scalar / vol_target_weights. Units follow `basis`
+    (annualised decimals) except "zmean", which is unitless; either way only the
+    trailing-percentile rank enters exposure_scalar, so the scale is immaterial.
+    """
+    if method not in ("zmean", "mean", "median", "worst"):
+        raise ValueError(f"method must be one of zmean/mean/median/worst, got {method!r}")
+    if method == "zmean":
+        mu = basis.rolling(window, min_periods=window // 4).mean()
+        sd = basis.rolling(window, min_periods=window // 4).std()
+        idx = -((basis - mu) / sd).mean(axis=1)
+    elif method == "mean":
+        idx = -basis.mean(axis=1)
+    elif method == "median":
+        idx = -basis.median(axis=1)
+    else:
+        idx = -basis.min(axis=1)
+    return idx.rename("basis_stress")
+
+
 def load_benchmarks() -> pd.DataFrame:
     """Carry benchmark index levels (DBHVG10U, FXCTEM8, DBHVBUSI)."""
     return load_wide("fx_carry_benchmarks")
@@ -366,27 +494,56 @@ def load_em_risk() -> pd.Series:
 def carry_portfolio(carry_ann: pd.DataFrame, xret: pd.DataFrame, n_buckets: int = 3,
                     rebal: str = "ME", vol_window: int = 60, min_per_leg: int = 2,
                     universe: list[str] | None = None,
-                    max_leg_share: float = 0.40) -> pd.DataFrame:
-    """Daily weight panel of an inverse-vol long/short carry sort.
+                    max_leg_share: float = 0.40,
+                    filter_signal: pd.DataFrame | None = None,
+                    weighting: str = "inv_vol", cov_window: int = 250) -> pd.DataFrame:
+    """Daily weight panel of a long/short carry sort, weighted within each leg.
 
     On each rebalance date (last observation per `rebal` period) currencies are
     sorted on carry into n_buckets; the top bucket is held long, the bottom
-    short. Within each leg weights are proportional to 1/trailing-vol
-    (vol_window days, needing >= vol_window//2 observations, which gates late
-    entrants like CNH), normalised to gross 1 per side (book gross 2, net 0),
-    with any single name capped at max_leg_share of its leg. A rebalance date
-    with fewer than min_per_leg names per bucket keeps the previous weights.
-    Weights are forward-filled to trading days and shifted one day — applied
-    from the next trading day, mirroring carry_hml_factor (no lookahead).
-    Note: signals are per-column last observations of the period, so a gappy
-    currency can contribute a slightly stale (intra-month) carry reading.
+    short. Within each leg weights follow `weighting`, are normalised to gross 1
+    per side (book gross 2, net 0), with any single name capped at
+    max_leg_share of its leg. A rebalance date with fewer than min_per_leg names
+    per bucket keeps the previous weights. Weights are forward-filled to trading
+    days and shifted one day — applied from the next trading day, mirroring
+    carry_hml_factor (no lookahead). Note: signals are per-column last
+    observations of the period, so a gappy currency can contribute a slightly
+    stale (intra-month) carry reading.
+
+    `weighting` selects the within-leg scheme (Stage 4 comparison):
+    - "inv_vol" (default): proportional to 1/trailing-vol (vol_window days,
+      needing >= vol_window//2 obs, which gates late entrants like CNH).
+    - "equal": 1/k per name.
+    - "erc": equal risk contribution (erc_weights) on the leg's shrunk_cov.
+    - "mvo": max-Sharpe (mvo_weights) with mu = sign*carry on the leg's
+      shrunk_cov.
+    For "erc"/"mvo" the covariance is a Ledoit-Wolf estimate over the trailing
+    `cov_window` days up to the rebalance date, computed on the leg's own names
+    (a small, well-conditioned block); a leg with fewer than
+    max(2*len(names), vol_window) complete rows falls back to inv_vol for that
+    leg. Because the covariance uses data only up to dt and the panel is
+    shifted one day at the end, the optimised schemes add no lookahead. The
+    default preserves the exact inverse-vol behaviour of earlier stages.
+
+    `filter_signal` (optional, same panel shape) applies a directional double
+    sort after bucketing: long-leg names are kept only where filter_signal >= 0
+    and short-leg names only where filter_signal <= 0, then each leg is
+    re-normalised over its survivors (the max_leg_share cap still binds). This
+    is the momentum-filter overlay (long high-carry that is also trending up,
+    short low-carry that is also trending down); a leg with no survivors that
+    period is simply left flat. filter_signal is sampled month-end and enters at
+    t-1 like the carry signal, so the overlay adds no lookahead.
     """
+    if weighting not in ("equal", "inv_vol", "erc", "mvo"):
+        raise ValueError(f"weighting must be equal/inv_vol/erc/mvo, got {weighting!r}")
     cols = carry_ann.columns.intersection(xret.columns)
     if universe is not None:
         cols = cols.intersection(universe)
+    xr = xret[cols]
     signal = carry_ann[cols].resample(rebal).last()
-    vol = xret[cols].rolling(vol_window, min_periods=vol_window // 2).std()
+    vol = xr.rolling(vol_window, min_periods=vol_window // 2).std()
     vol_rb = vol.resample(rebal).last()
+    filt = filter_signal[cols].resample(rebal).last() if filter_signal is not None else None
 
     rows = {}
     for dt in signal.index:
@@ -397,10 +554,31 @@ def carry_portfolio(carry_ann: pd.DataFrame, xret: pd.DataFrame, n_buckets: int 
         if k < min_per_leg:
             continue
         w = pd.Series(0.0, index=cols)
+        f = filt.loc[dt] if filt is not None else None
+        hist = xr.loc[:dt] if weighting in ("erc", "mvo") else None
         for names, sign in ((valid["carry"].nlargest(k).index, 1.0),
                             (valid["carry"].nsmallest(k).index, -1.0)):
-            leg = (1.0 / valid.loc[names, "vol"])
-            leg /= leg.sum()
+            if f is not None:
+                fn = f.reindex(names)
+                names = names[(fn >= 0).values] if sign > 0 else names[(fn <= 0).values]
+                if len(names) == 0:
+                    continue
+            if weighting == "equal":
+                leg = pd.Series(1.0, index=names)
+            elif weighting == "inv_vol":
+                leg = (1.0 / valid.loc[names, "vol"])
+            else:
+                sub = hist[list(names)]
+                if len(sub.tail(cov_window).dropna(how="any")) < max(2 * len(names), vol_window):
+                    leg = (1.0 / valid.loc[names, "vol"])  # cov not estimable -> inv_vol
+                else:
+                    cov = shrunk_cov(sub, window=cov_window)
+                    if weighting == "erc":
+                        leg = erc_weights(cov)
+                    else:
+                        mu = (sign * valid.loc[names, "carry"]).to_numpy()
+                        leg = mvo_weights(mu, cov, gross=1.0, max_share=max_leg_share)
+            leg = leg / leg.sum()
             for _ in range(10):
                 if not (leg > max_leg_share + 1e-12).any():
                     break
@@ -431,6 +609,127 @@ def vol_target_weights(weights: pd.DataFrame, xret: pd.DataFrame, target: float 
     scalar_rb = scalar.resample(rebal).last()
     daily = scalar_rb.reindex(weights.index, method="ffill").shift(1)
     return weights.mul(daily, axis=0)
+
+
+# ---------------------------------------------------------------------------
+# Within-leg weighting schemes (Stage 4): shrinkage cov, ERC, mean-variance
+# ---------------------------------------------------------------------------
+
+def shrunk_cov(xret: pd.DataFrame, window: int = 250) -> pd.DataFrame:
+    """Ledoit-Wolf shrinkage covariance toward a scaled-identity target.
+
+    Takes a daily-return frame, uses its last `window` complete-case rows
+    (tail(window) then dropna(how="any"), so the sample covariance is genuinely
+    PSD rather than a pairwise pseudo-cov), demeans each column and forms the
+    MLE sample covariance S = X'X / t. Shrinks toward F = mu*I with
+    mu = trace(S)/N (Ledoit & Wolf 2004, the single-parameter `cov1Para`
+    estimator), at the closed-form optimal intensity
+    delta* = clip((pi_hat / gamma_hat) / t, 0, 1), where
+    pi_hat = sum((X^2)'(X^2)/t - S^2) and gamma_hat = ||S - F||_F^2. Returns
+    delta*F + (1-delta*)S as a DataFrame labelled by the surviving columns.
+
+    NOT annualised: both consumers (erc_weights and the fixed-budget max-Sharpe
+    in mvo_weights) are invariant to Sigma -> c*Sigma, so scaling by ANN_DAYS
+    would be a no-op — kept as a plain daily estimator. Too-few-rows and
+    universe selection are the caller's responsibility (see carry_portfolio),
+    which keeps this helper pure; given >= 2 complete rows it always returns a
+    symmetric positive-definite matrix.
+    """
+    data = xret.tail(window).dropna(how="any")
+    cols = data.columns
+    X = data.to_numpy(dtype=float)
+    t, n = X.shape
+    X = X - X.mean(axis=0)
+    S = (X.T @ X) / t
+    mu = np.trace(S) / n
+    F = mu * np.eye(n)
+    Xsq = X ** 2
+    pi_hat = ((Xsq.T @ Xsq) / t - S ** 2).sum()
+    gamma = np.sum((S - F) ** 2)
+    delta = float(np.clip((pi_hat / gamma) / t, 0.0, 1.0)) if gamma > 0 else 0.0
+    sigma = delta * F + (1.0 - delta) * S
+    return pd.DataFrame(sigma, index=cols, columns=cols)
+
+
+def erc_weights(cov, max_iter: int = 1000, tol: float = 1e-8):
+    """Long-only equal-risk-contribution weights via cyclical coordinate descent.
+
+    Solves the strictly-convex log-barrier program
+    min 1/2 w'Sigma w - (1/N) sum log w_i, w > 0, whose stationary point
+    equalises the risk contributions RC_i = w_i (Sigma w)_i (Spinu 2013;
+    Griveau-Billion, Richard & Roncalli 2013). Each coordinate update takes the
+    positive root of y_i Sigma_ii + c_i - b/y_i = 0 with
+    c_i = sum_{j!=i} y_j Sigma_ij and b = 1/N, sweeping cyclically from an
+    inverse-vol warm start; the update runs on the raw y (the log-barrier fixed
+    point y_i (Sigma y)_i = b), while convergence is measured on the normalised
+    weights y/sum(y) against `tol` for interpretability. Returns weights summing
+    to 1 (positive). A diagonal Sigma converges in one sweep to
+    w_i proportional to 1/sigma_i — i.e. reduces exactly to inverse-vol.
+
+    No single-name cap here: the cap is applied outside by carry_portfolio's
+    existing clip-and-renormalise loop, exactly as for inverse-vol.
+    """
+    S = np.asarray(cov, dtype=float)
+    n = S.shape[0]
+    if n == 1:
+        w = np.ones(1)
+    else:
+        b = 1.0 / n
+        y = 1.0 / np.sqrt(np.diag(S))
+        w = y / y.sum()
+        for _ in range(max_iter):
+            w_prev = y / y.sum()
+            for i in range(n):
+                c = S[i] @ y - S[i, i] * y[i]
+                a = S[i, i]
+                y[i] = (-c + np.sqrt(c * c + 4.0 * a * b)) / (2.0 * a)
+            w = y / y.sum()
+            if np.max(np.abs(w - w_prev)) < tol:
+                break
+    return pd.Series(w, index=cov.index) if isinstance(cov, pd.DataFrame) else w
+
+
+def mvo_weights(mu, cov, gross: float = 1.0, max_share: float = 0.40):
+    """Long-only max-Sharpe weights under leg-gross and single-name-cap constraints.
+
+    Maximises (mu'w) / sqrt(w'Sigma w) subject to w >= 0, sum(w) = gross,
+    w <= max_share, via SLSQP on the negative Sharpe ratio (a tiny
+    trace-proportional ridge on Sigma guarantees strict positive-definiteness).
+    mu is the observable forward-implied carry — no return forecasting.
+
+    Precondition (caller's responsibility): pass mu = sign * carry so that
+    shorting a low/negative-carry name reads as positive expected profit;
+    mvo_weights is sign-agnostic and always returns positive weights summing to
+    `gross`, with carry_portfolio applying `sign` outside. Guards: if a leg is
+    too small for the cap (n * max_share < gross) the cap is relaxed to
+    eff_cap = max(max_share, gross/n) — matching inverse-vol's effective
+    equal-weight collapse in the same case; if mu has no positive entry the
+    max-Sharpe objective is ill-posed and we fall back to min-variance under the
+    same constraints; if the optimiser fails we fall back to equal weight. The
+    result is always finite and feasible, so the caller never sees NaNs.
+    """
+    mu = np.asarray(mu, dtype=float)
+    S = np.asarray(cov, dtype=float)
+    n = len(mu)
+    idx = cov.index if isinstance(cov, pd.DataFrame) else None
+    eff_cap = max(max_share, gross / n)
+    S = S + 1e-10 * (np.trace(S) / n) * np.eye(n)
+    bounds = [(0.0, eff_cap)] * n
+    cons = ({"type": "eq", "fun": lambda w: w.sum() - gross},)
+    w0 = np.full(n, gross / n)
+
+    def _solve(objective):
+        r = minimize(objective, w0, method="SLSQP", bounds=bounds,
+                     constraints=cons, options={"maxiter": 200, "ftol": 1e-12})
+        w = r.x if r.success else w0
+        w = np.clip(w, 0.0, eff_cap)
+        return w * (gross / w.sum())
+
+    if np.any(mu > 0):
+        w = _solve(lambda w: -(mu @ w) / np.sqrt(w @ S @ w + 1e-18))
+    else:
+        w = _solve(lambda w: w @ S @ w)
+    return pd.Series(w, index=idx) if idx is not None else w
 
 
 def exposure_scalar(indicator: pd.Series, lookback: int = 756, q: float = 0.80,
@@ -466,6 +765,35 @@ def exposure_scalar(indicator: pd.Series, lookback: int = 756, q: float = 0.80,
     daily = s_me.reindex(indicator.index, method="ffill").shift(1).fillna(1.0)
     daily.name = indicator.name
     return daily
+
+
+def regime_classify(indicators: pd.DataFrame, lookback: int = 756,
+                    breaks: tuple[float, float] = (0.70, 0.90)) -> pd.DataFrame:
+    """Percentile-composite market-regime classifier: Low / Moderate / Crisis.
+
+    Each indicator column (VIX, aggregate FX ATM implied vol, EMBI spread, ...)
+    is ranked into its own trailing `lookback`-day percentile (756d ≈ 3y,
+    min_periods = lookback // 2 — the library's window // 2 convention); the
+    composite is the row-mean of the available ranks. Regimes are cut at
+    asymmetric `breaks` on the composite: `composite <= breaks[0]` -> Low,
+    `<= breaks[1]` -> Moderate, else Crisis. Asymmetric because crisis is a tail
+    state — equal terciles would mislabel a third of history "crisis".
+
+    Trailing windows only, so the label at date t uses data through t and adds
+    no lookahead as a descriptive series; when it drives allocation it must be
+    lagged (resample at rebalance + shift one day), exactly like exposure_scalar.
+    Returns a daily frame: each indicator's `<name>_rank`, the `composite`, and
+    the `regime` label (NaN through the burn-in where no rank is available yet).
+    """
+    ranks = indicators.rolling(lookback, min_periods=lookback // 2).rank(pct=True)
+    composite = ranks.mean(axis=1).rename("composite")
+    lo, hi = breaks
+    regime = pd.cut(composite, bins=[-np.inf, lo, hi, np.inf],
+                    labels=["Low", "Moderate", "Crisis"])
+    out = ranks.add_suffix("_rank")
+    out["composite"] = composite
+    out["regime"] = regime.astype(object).where(composite.notna())
+    return out
 
 
 def portfolio_returns(weights: pd.DataFrame, xret: pd.DataFrame,
@@ -585,3 +913,30 @@ def vol_surface_panel(kind: str = "ATM", tenor: str = "1M", delta: int = 25) -> 
             s = -s  # FX-first pair: RR = FX-call minus FX-put -> flip to crash-positive
         out[ccy] = s
     return pd.DataFrame(out)
+
+
+def implied_skew_panel(tenor: str = "1M", delta: int = 25,
+                       standardize: bool = True) -> pd.DataFrame:
+    """Option-implied crash skew per currency from the risk reversal.
+
+    The 25-delta risk reversal is the market price of the smile's slope — how much
+    richer out-of-the-money FX puts are than calls — and is the first-order,
+    model-free read on the risk-neutral skewness of each currency vs USD. Built on
+    `vol_surface_panel("RR")`, already sign-normalised crash-positive: positive =
+    puts rich = the market pricing a fat left tail (crash) for a long-FX carry
+    position, so it is the *negative* of the risk-neutral skewness. If
+    `standardize` (default) the RR is divided by the ATM vol
+    (`vol_surface_panel("ATM")`) to give the dimensionless "smile skew" RR/ATM
+    (Malz 1997), comparable across currencies on very different vol levels; the
+    ATM-scaled slope preserves the cross-sectional ranking the sort relies on. A
+    full Bakshi-Kapadia-Madan model-free skewness would need the whole strike
+    chain, which the 3-point (ATM/RR/BF) surface here does not provide. Purely
+    contemporaneous per date, so it introduces no lookahead — consumed like
+    `carry_panel`, sampled month-end and shifted one day downstream.
+    """
+    rr = vol_surface_panel("RR", tenor=tenor, delta=delta)
+    if not standardize:
+        return rr
+    atm = vol_surface_panel("ATM", tenor=tenor)
+    common = rr.columns.intersection(atm.columns)
+    return rr[common] / atm[common].replace(0.0, np.nan)
