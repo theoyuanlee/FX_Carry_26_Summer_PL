@@ -2,7 +2,7 @@
 
 *Author: Cesare Bavaresco · UChicago Summer Project Lab with Bank of America (Corporate Treasury / Global Funding).*
 *Data: daily Bloomberg, 2007-01 → 2026-06, G10 + EM currencies vs USD.*
-*Last updated: 2026-07-13.*
+*Last updated: 2026-07-14.*
 *Status legend: ✅ done · 🔶 partial · ⬜ not started.*
 
 This document replaces the original generic project outline. It is now git-tracked and serves as the
@@ -645,10 +645,21 @@ priors; (2) add a pure `fx_utils` helper + a dedicated notebook under the existi
 first signal. Repo hygiene (§14.4) can run in parallel; the final report (§14.2/14.3) waits to fold
 in the Phase-3 finding.
 
-### 17.1 D1 — Crash-Risk-Premium-Adjusted Carry ✅ (Jul 2026) — **null**
+### 17.1 D1 — Crash-Risk-Premium-Adjusted Carry ✅ (Jul 2026) — **null** · *can rerun with better data*
 
 **Status:** done. An option-implied-skew battery, built on the matched 21-name option universe and
 falsified against both bars. Result: **null** — a valid deliverable.
+
+**⚑ Completed, but re-runnable with stronger inputs — see [`DATA_SHOPPING_LIST.md`](DATA_SHOPPING_LIST.md) §0, §2.**
+Two upgrades would harden (or genuinely retest) the null:
+1. **Model-free skewness from the 10Δ wings we already have (no purchase).** Verified 2026-07-14: `data/raw/`
+   holds full-history **10Δ RR *and* BF** (`…10R{t}`/`…10B{t}`) for all 21 option names — the surface is a
+   **5-point smile** (ATM, 25R, 25B, 10R, 10B), *not* the 3-point set `implied_skew_panel`'s docstring assumes.
+   D1 tested the Li–Sarno–Zinna SRP with only a 25Δ RR/ATM smile-slope proxy; the *correct* SRP input is a
+   Bakshi–Kapadia–Madan model-free risk-neutral skewness, which the wings now make possible. If SRP still fails to
+   subsume carry under the proper construction, the null is bulletproof; this is the highest-value, zero-cost rerun.
+2. **Full-27 universe (purchase).** Adding option surfaces for the 6 currently-optionless EM (CLP/COP/IDR/MYR/PEN/PHP,
+   shopping list §2.2) would let D1 run on the full tradable 27 instead of the matched U21.
 
 **What exists:**
 - Helpers in `fx_utils.py`: `implied_skew_panel` (RR/ATM smile skew; crash-positive = the *negative*
@@ -703,12 +714,26 @@ dollar funding, feasible today) and **D2** (FX vol risk premium) — were next u
 below, §17.2 — also null); the D1 null already earns a place in the §14.3 report as evidence that the
 crash-risk thread, though economically real, is not tradable alpha.
 
-### 17.2 D3 — Cross-Currency Basis / Dollar-Funding Carry ✅ (Jul 2026) — **null**
+### 17.2 D3 — Cross-Currency Basis / Dollar-Funding Carry ✅ (Jul 2026) — **null** · *can rerun with better data*
 
 **Status:** done. A cross-currency-basis battery — a funding-stress **conditioner** *and* a
 **cross-sectional signal** — built on the matched 7-name basis universe and falsified against both
 bars. Result: **null** — a valid deliverable, and a decisive one: on the only universe where the basis
 is measurable here, carry itself is uncompensated.
+
+**⚑ Completed, but the null was largely a data artifact — the two limits that crippled it are both fixable, so this
+is the Phase-3 result most likely to *change* with new data. See [`DATA_SHOPPING_LIST.md`](DATA_SHOPPING_LIST.md) §3.**
+1. **Window cap is the USD LIBOR leg, not the onshore fixings (correction).** Verified 2026-07-14: the onshore EM
+   fixings *and* the NDFs/forwards all run to **2026-06/07** — but synthetic **USD LIBOR `US0001M`/`US0003M` was
+   discontinued 2024-09-30**, which is what kills `interest_diff_vs_usd` → `cip_basis`. Swapping in a **USD SOFR-OIS
+   leg** (shopping list §3.1) extends the whole D3 window ~2 years *and* modernizes the basis to the DTV-consistent
+   OIS convention. (The prose below and plan §5.2 still say "onshore fixings end 2024-09" — that attribution is
+   wrong and is corrected here.)
+2. **The universe is fixably narrow (purchase).** The 7-name onshore-fixing EM set has **no G10** and an anchor
+   carry that is itself negative (a TRY artifact). **Direct G10 cross-currency basis swaps** (`EUBS3`/`JYBS3`/…,
+   §3.2) are quoted market instruments that sidestep the onshore-fixing requirement entirely — giving us the G10
+   dollar-funding basis the Du–Tepper–Verdelhan literature actually studies. This could turn D3 from "null on a
+   weak EM universe" into a real test.
 
 **What exists:**
 - Helper in `fx_utils.py`: `basis_stress_index` (aggregate dollar-funding-stress gauge from the
@@ -725,8 +750,10 @@ is measurable here, carry itself is uncompensated.
   inv-vol-net Sharpe to the committed Stage-4 0.4659 over the full window (Δ = 0.00000).
 - Matched universe **U7** = tradable-27 ∩ `cip_basis` (onshore-fixing) coverage = CNH HUF ILS INR PLN
   THB TRY (7 EM names; **no G10** — the basis needs onshore fixings, so the G10 dollar-funding basis
-  DTV studied is out of reach with this engine). Two structural caveats: the onshore fixings **end
-  2024-09**, so every basis-dependent track is evaluated on **2007-05 → 2024-09** (the ALL-27 baseline
+  DTV studied is out of reach with this engine). Two structural caveats: the **USD funding leg (synthetic
+  USD LIBOR `US0001M`/`US0003M`) was discontinued 2024-09-30** — *not* the onshore fixings, which run to 2026-07
+  (correction, see the ⚑ note above; fixable with a SOFR-OIS leg) — so every basis-dependent track is evaluated on
+  **2007-05 → 2024-09** (the ALL-27 baseline
   is reconciled to the committed number over the full 2007-05 → 2026-06 window separately); and this
   universe is *entirely* restricted/convertibility-constrained EM.
 
@@ -781,6 +808,12 @@ novel, fails to beat the simple book.
 **D2** (FX vol risk premium); D4–D6 need a data add first. Two independent *novel* signals
 (option-implied skew, cross-currency basis) now join the four *standard* embellishments in failing to
 beat the simple vol-targeted EM-carry book — the §14.3 report's central, well-evidenced result.
+
+**Next up — D2 can start on data already in the repo.** Verified 2026-07-14: `data/raw/` already holds full-history
+**ATM implied vol at five tenors (1W/1M/3M/6M/1Y)** for every option name, so the implied-vs-realized VRP term
+structure needs no new pull. The data *wants* for D2 (an investable FX vol-carry benchmark for external validation;
+OHLC spot for range-based realized vol) plus the free 10Δ/multi-tenor wins and the D1/D3 rerun upgrades are catalogued
+in [`DATA_SHOPPING_LIST.md`](DATA_SHOPPING_LIST.md).
 
 ---
 
