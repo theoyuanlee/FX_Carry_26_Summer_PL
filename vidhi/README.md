@@ -1,6 +1,8 @@
-# Adaptive FX Carry: Learning When Carry Works
+# Adaptive FX Carry: When Carry Works
 
 Test for an independent regime-aware FX carry research built on shared G10 and EM datasets.
+
+The objective is to research how can the losses be contained under a carry strategy, rather than focusing on increasing the profits.
 
 ## Research question
 
