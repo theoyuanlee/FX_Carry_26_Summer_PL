@@ -1,0 +1,29 @@
+currency,spot_column,forward_column,forward_root,invert_to_usd_per_fx,status
+AUD,AUD Curncy__PX_LAST,AUD1M Curncy__PX_LAST,AUD,False,ok
+BRL,BRL Curncy__PX_LAST,BCN1M Curncy__PX_LAST,BCN,True,ok
+CAD,CAD Curncy__PX_LAST,CAD1M Curncy__PX_LAST,CAD,True,ok
+CHF,CHF Curncy__PX_LAST,CHF1M Curncy__PX_LAST,CHF,True,ok
+CLP,CLP Curncy__PX_LAST,CLN1M Curncy__PX_LAST,CLN,True,ok
+CNH,CNH Curncy__PX_LAST,CNH1M Curncy__PX_LAST,CNH,True,ok
+CNY,CNY Curncy__PX_LAST,CHN1M Curncy__PX_LAST,CHN,True,ok
+COP,COP Curncy__PX_LAST,,,True,missing_1m_forward
+DKK,DKK Curncy__PX_LAST,DKK1M Curncy__PX_LAST,DKK,True,ok
+EUR,EUR Curncy__PX_LAST,EUR1M Curncy__PX_LAST,EUR,False,ok
+GBP,GBP Curncy__PX_LAST,GBP1M Curncy__PX_LAST,GBP,False,ok
+HUF,HUF Curncy__PX_LAST,HUF1M Curncy__PX_LAST,HUF,True,ok
+IDR,IDR Curncy__PX_LAST,IHO1M Curncy__PX_LAST,IHO,True,ok
+ILS,ILS Curncy__PX_LAST,ILS1M Curncy__PX_LAST,ILS,True,ok
+INR,INR Curncy__PX_LAST,IRN1M Curncy__PX_LAST,IRN,True,ok
+JPY,JPY Curncy__PX_LAST,JPY1M Curncy__PX_LAST,JPY,True,ok
+KRW,KRW Curncy__PX_LAST,,,True,missing_1m_forward
+MXN,MXN Curncy__PX_LAST,MXN1M Curncy__PX_LAST,MXN,True,ok
+MYR,MYR Curncy__PX_LAST,MYR1M Curncy__PX_LAST,MYR,True,ok
+NOK,NOK Curncy__PX_LAST,NOK1M Curncy__PX_LAST,NOK,True,ok
+NZD,NZD Curncy__PX_LAST,NZD1M Curncy__PX_LAST,NZD,False,ok
+PHP,PHP Curncy__PX_LAST,PHP1M Curncy__PX_LAST,PHP,True,ok
+PLN,PLN Curncy__PX_LAST,PLN1M Curncy__PX_LAST,PLN,True,ok
+SEK,SEK Curncy__PX_LAST,SEK1M Curncy__PX_LAST,SEK,True,ok
+SGD,SGD Curncy__PX_LAST,SGD1M Curncy__PX_LAST,SGD,True,ok
+THB,THB Curncy__PX_LAST,THB1M Curncy__PX_LAST,THB,True,ok
+TRY,TRY Curncy__PX_LAST,TRY1M Curncy__PX_LAST,TRY,True,ok
+ZAR,ZAR Curncy__PX_LAST,ZAR1M Curncy__PX_LAST,ZAR,True,ok
