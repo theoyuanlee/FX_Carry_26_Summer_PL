@@ -1,8 +1,15 @@
 # `cesare/` — FX Carry Strategy Research
 
-This folder is my slice of the FX Carry project. It holds the project's engine
-(`fx_utils.py`), seven stage notebooks that each test one idea end-to-end, and the
-committed result CSVs in `outputs/`. The headline finding: **the 2007–2026 currency
+This folder is my slice of the FX Carry project. It holds seven stage notebooks that each test one
+idea end-to-end and the committed result CSVs in `outputs/`.
+
+> **The engine moved.** `fx_utils.py` now lives in the team-owned
+> [`../strategy/`](../strategy/) package (plan §18), which also provides `run(config)` — the one
+> base strategy every teammate's extension builds on. `cesare/fx_utils.py` remains here as a
+> re-export shim, so every notebook below still works unchanged. New work should start from
+> [`../strategy/README.md`](../strategy/README.md).
+
+The headline finding: **the 2007–2026 currency
 premium is EM carry, not G10** — a simple vol-targeted, inverse-vol long/short carry book
 in EM+G10 earns ~7.0%/yr gross (Sharpe **0.63** gross / **0.47** net) versus ~1.9%/yr for
 a G10-only book (Sharpe 0.17). **Every overlay we tried — dynamic hedges, portfolio
@@ -16,7 +23,7 @@ methodology, and per-stage verdicts live in
 
 ```
 cesare/
-├── fx_utils.py                     # the engine: pure-function library (data → panels → stats → portfolios)
+├── fx_utils.py                     # re-export shim -> ../strategy/fx_utils.py (the engine)
 ├── FX_Carry_Strategy_Project_Plan.md   # source of truth (methodology, results, verdicts)
 ├── README.md                       # this file
 ├── requirements.txt                # only what cesare/ imports + the Jupyter runtime

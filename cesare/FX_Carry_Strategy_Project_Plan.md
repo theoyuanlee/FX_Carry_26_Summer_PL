@@ -2,7 +2,7 @@
 
 *Author: Cesare Bavaresco · UChicago Summer Project Lab with Bank of America (Corporate Treasury / Global Funding).*
 *Data: daily Bloomberg, 2007-01 → 2026-06, G10 + EM currencies vs USD.*
-*Last updated: 2026-07-14.*
+*Last updated: 2026-07-28.*
 *Status legend: ✅ done · 🔶 partial · ⬜ not started.*
 
 This document replaces the original generic project outline. It is now git-tracked and serves as the
@@ -118,6 +118,7 @@ Stage dashboard:
 | 5. Momentum overlay | ✅ | `cesare/momentum_overlay.ipynb`; `fx_utils.momentum_panel`, `zscore_xs`, `carry_portfolio(filter_signal=)`; backtest §3 MOM factor | `stage5_momentum_comparison.csv`, `stage5_track_correlation.csv` |
 | 6. Regime analysis | ✅ | `cesare/regime_analysis.ipynb`; `fx_utils.regime_classify` | `regime_series.csv`, `stage6_regime_stats.csv`, `stage6_conditional_by_regime.csv` |
 | 7. ML extension (optional) | ⬜ | — | — |
+| **Team base strategy (§18)** | ✅ | `strategy/` (repo root) | `strategy/{config,core,fx_utils}.py`, README, 5 examples, 12 acceptance tests |
 | Final evaluation & report | 🔶 | §14.1 metrics ✅; repo hygiene ✅ (cesare/, §14.4); §14.2 table + §14.3 report not started | regenerated stats CSVs; `README.md`, `requirements.txt` |
 
 ## 5. Data & Infrastructure — Stage 0 ✅
@@ -158,7 +159,11 @@ done and documented here because every later stage depends on these conventions.
 - **Environment note:** pyarrow must be the pip build (≥24) — conda's 19.x cannot read these files;
   refix with `/opt/anaconda3/bin/pip install -U pyarrow` after any broad conda update.
 
-### 5.3 Shared library map — `cesare/fx_utils.py`
+### 5.3 Shared library map — `strategy/fx_utils.py`
+
+*(Moved from `cesare/fx_utils.py` to the team-owned `strategy/` package on 2026-07-28, §18.
+`cesare/fx_utils.py` remains as a re-export shim, so every notebook and every teammate's
+`sys.path.insert(0, "../cesare"); import fx_utils` keeps working unchanged.)*
 
 | Group | Functions |
 |---|---|
@@ -587,6 +592,7 @@ fx_utils docstring paths`).
 | 6 | Stage 6 regimes ✅ | 3, 4 | 1.5 d | Generalizes the Stage-3 threshold rule |
 | 7 | **Phase 3 — novel edge (§17)** ← next | 4, 5, 6 | 4–6 wk | The main event: a differentiated signal that beats the simple book |
 | 8 | Stage 7 ML (optional) | 7 | 2–3 d | Back pocket; only if Phase-3 signals warrant it |
+| 8b | **§18 team base strategy (`strategy/`)** ✅ | 1 | 1 d | Done 2026-07-28. Unblocks teammates: every extension now sits on one comparable book |
 | 9 | §14.2 final table + §14.3 report + repo-wide collation | all above | 2–3 d | Terminal deliverable; folds in the Phase-3 result (cesare/ §14.4 hygiene already done) |
 
 Key dependency edges: metrics → everything; momentum → regime stats → ML features; the Stage-3
@@ -814,6 +820,92 @@ beat the simple vol-targeted EM-carry book — the §14.3 report's central, well
 structure needs no new pull. The data *wants* for D2 (an investable FX vol-carry benchmark for external validation;
 OHLC spot for range-based realized vol) plus the free 10Δ/multi-tenor wins and the D1/D3 rerun upgrades are catalogued
 in [`DATA_SHOPPING_LIST.md`](DATA_SHOPPING_LIST.md).
+
+---
+
+## 18. Team Base Strategy — `strategy/` ✅ (2026-07-28)
+
+**Why.** Team decision: every teammate's extension should be tested on *one* baseline so the
+extensions are comparable to each other. Until now they were not. An audit of the repo on
+2026-07-28 found five different baseline carry strategies in five folders, differing in
+frequency, quoting convention, universe, cost model, data source — and, in one case, in whether
+the strategy collects carry at all:
+
+| Person | Their baseline | Divergence from this project's construction |
+|---|---|---|
+| Vidhi | own 26-name daily book, flat 5bps cost | **Portfolio returns are `log_return(spot)` only — the carry accrual is never added**, so the book sorts on carry and harvests none of it. Static track: Sharpe −0.71, MaxDD −72%. Her regime gate's "improvement" is loss-reduction on a book that should not be losing. Also: full-sample feature screening before the expanding-window fit (leak), and the gate multiplies *returns*, so de-risking is costless. |
+| Dafu | `src/fxcarry/` + private `dafu/data/raw/` copies | Monthly, FCU-per-USD, `rx = f_t − s_{t+1}`, 1984-start, ±1/N sign weighting, no costs, no vol target. Internally coherent and correct for the BER replication it was built for — but not comparable to anything else here, and on different data. |
+| Arjun | rebuilds this project's book inline, three copies of the same `build_book()` | Correct — reconciles to 0.466 within 5e-3 — but duplicated per notebook. His unmerged `arjun_utils.py` docstring already names itself "the seam where my work can diverge from the team's headline strategy". |
+| Theo | own G10/EM panels and processed parquets | Owns the FX-options / skew / vol-filter extension (`theo/06_options_skew_and_vol_filters.ipynb`). |
+| Cesare | this project's engine | The validated construction: external benchmarks, real bid/ask costs, no-lookahead guards, reconciled outputs. |
+
+**What was built.** `strategy/` at the repo root — a thin, config-driven wrapper over this
+project's engine. It adds no financial maths of its own; it fixes the *order of operations* and
+exposes every knob and two extension hooks.
+
+- **`strategy/config.py`** — `StrategyConfig`, a frozen dataclass whose defaults ARE the published
+  baseline. Fields cover universe/exclusions/tenor, signal (carry, momentum, or any user panel or
+  callable), sort and within-leg weighting (`n_buckets`, `weighting`, `max_leg_share`,
+  `min_per_leg`, `vol_window`, `cov_window`, `rebal`), sizing (`vol_target`, `lev_cap`,
+  `vol_floor`), costs (`costs`, `cost_multiple`), window, and the hooks below. Presets
+  `ALL_BASELINE` / `G10_BASELINE` / `EM_BASELINE`; `.with_()` derives variants.
+- **`strategy/core.py`** — `run(config) -> StrategyResult`. Fixed pipeline: panels (cached) →
+  signal → `carry_portfolio` → `vol_target_weights` → **overlays** → `portfolio_returns` /
+  `roundtrip_cost`. `StrategyResult` carries gross/cost/net, unit and traded weight panels, the
+  per-currency `contrib`, the `spot_component`/`carry_component` decomposition, turnover and cost
+  drag, plus `summary()`, `monthly()`, `reslice()`, and `returns_from_weights` /
+  `cost_from_weights` for post-hoc re-pricing without a rebuild.
+- **`strategy/fx_utils.py`** — the engine, moved from `cesare/` unchanged. `cesare/fx_utils.py` is
+  now a re-export shim, so all eight cesare notebooks and Arjun's three notebooks keep working
+  with zero edits.
+- **`strategy/README.md`** — the contract, written for teammates *and their AI agents*: setup,
+  what the base enforces for you, full `StrategyConfig`/`StrategyResult` reference tables, the four
+  extension patterns, a ten-point rules section for agents, a per-teammate porting guide, and the
+  reconciliation targets.
+- **`strategy/examples/`** — five runnable scripts (baseline, regime exposure gate, per-currency
+  option overlay, robustness sweep, universe/crisis studies).
+- **`strategy/tests/test_reconciliation.py`** — 12 acceptance tests, all passing.
+
+**The two hooks (the design decision that matters).** Overlays modify **weights**, not returns,
+and are applied *before* the cost model:
+
+- `exposure: pd.Series` — total-risk gate (regimes, macro, ML timing). Sampled on the rebalance
+  grid and lagged one period by the base; pre-history is fully invested (the `exposure_scalar`
+  convention).
+- `weight_overlay: f(weights, ctx) -> weights` — per-currency changes (option hedges, filters,
+  manual edits), with `ctx` carrying panels, unit weights and the signal.
+
+Because both move weights, a de-risking rule pays the transaction costs of the trades it triggers
+and its turnover is reported. An overlay applied to a return series is free — which flatters every
+risk-management rule ever tested, and is precisely the defect found in the surveyed baselines.
+
+**Acceptance criteria — met.** `run()` reproduces the committed headline exactly: ALL gross
+**0.6284** / net **0.4659**, G10 **0.1669** / **0.1191** (vs `outputs/strategy_summary_stats.csv`,
+|Δ| < 5e-4 including ann_return, ann_vol, MaxDD and skew); turnover 0.675, cost drag 1.81%/yr.
+Internal identities hold to **0.00e+00**: `contrib.sum(axis=1) == gross`,
+`xret == spot_component + carry_component`, `net == gross − cost`. Both hooks are exact no-ops at
+neutral settings (`exposure=1.0`, identity overlay), so an extension measures its own effect.
+Post-hoc `cost_from_weights` / `returns_from_weights` match a full rebuild to 0.00e+00. All nine
+swept knobs demonstrably move the book.
+
+**External cross-check.** The sweep example independently reproduces Arjun's published audit from
+the shared base: jackknife most-damaging names JPY (−0.086) / CNH (−0.076) / MXN (−0.073), ZAR a
+drag (+0.099 to drop), the edge dying between 2× and 3× spreads, and the 60d × ME cell sitting on a
+plateau rather than a spike. Two independent implementations agreeing is the strongest evidence the
+base is right.
+
+**Consequences for the team.** Vidhi's headline result must be re-derived on the base — the sign of
+her static book will very likely flip, and her gate will now pay for itself. Arjun's three inline
+`build_book()` copies collapse into `run(**override)`. Theo's option work becomes a
+`weight_overlay` (with the honest caveat that `data/raw` holds option **mids only**, so a
+premium-paying hedge cannot be costed until the bid/ask in `DATA_SHOPPING_LIST.md` §2.2 is bought —
+a position-trimming proxy is the defensible version meanwhile). Dafu's `src/fxcarry/` stays as-is
+for the BER replication, which **cannot** be reproduced on the team base at all: BER starts in 1984
+and the shared `data/raw/` starts in 2007.
+
+**Not done / deliberately out of scope for v1.** Monthly frequency and the FCU-per-USD convention
+(so `src/fxcarry/` is not absorbed); an options *pricing* layer; packaging (`pyproject.toml`) and
+a repo-wide `requirements.txt` — both belong to the §14.4 repo-wide collation.
 
 ---
 
