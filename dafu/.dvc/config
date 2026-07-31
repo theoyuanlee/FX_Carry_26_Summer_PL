@@ -1,8 +1,6 @@
 [core]
     remote = hf
 # Public, read-only, no credentials: `dvc pull` works straight after a clone.
+# New data is published with scripts/publish_data_hf.py, not `dvc push`.
 ['remote "hf"']
     url = https://huggingface.co/datasets/dafuzhu/fxcarry-data/resolve/main
-# The original Box remote, kept for writing. Needs the rclone WebDAV bridge running.
-['remote "box-remote"']
-    url = webdav://127.0.0.1:8080

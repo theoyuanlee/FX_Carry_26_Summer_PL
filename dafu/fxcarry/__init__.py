@@ -8,6 +8,7 @@ from fxcarry import (
     quotes,
     reference,
     regimes,
+    registry,
     stats,
     strategy,
     vol,
@@ -28,7 +29,7 @@ from fxcarry.options import (
     Vanilla,
     VerticalSpread,
 )
-from fxcarry.quotes import FrameSource, ParquetSource, Quotes, QuoteSource
+from fxcarry.quotes import DataNotPulled, FrameSource, ParquetSource, Quotes, QuoteSource
 from fxcarry.regimes import (
     INFORMATION_SETS,
     LogisticRegime,
@@ -64,10 +65,10 @@ __version__ = "0.1.0"
 __all__ = [
     # modules
     "catalog", "compare", "curves", "options", "quotes", "reference", "regimes",
-    "stats", "strategy", "vol",
+    "registry", "stats", "strategy", "vol",
     # market identity and data
     "Catalog", "Currency", "TickerId",
-    "Quotes", "QuoteSource", "ParquetSource", "FrameSource",
+    "Quotes", "QuoteSource", "ParquetSource", "FrameSource", "DataNotPulled",
     "SpotForward", "Smile", "VolSurface",
     # options
     "PricingModel", "Black76", "MarketState",
