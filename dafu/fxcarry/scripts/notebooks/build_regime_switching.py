@@ -52,6 +52,11 @@ regime models, spanning latent-state estimators, a rule on an observable, and a 
 classifier, all improve the book when they are allowed a peek at the future, and all fail to
 improve it when they are not.
 
+The second half of the notebook puts the same question to the instrument built for the job.
+A carry crash is what an FX put is for, and the option market has been quoting a price for it
+throughout. That turns out to change the problem rather than solve it: the obstacle there is a
+premium rather than a model, and knowing the regime does not buy the premium down.
+
 This notebook needs two repositories side by side. The estimators come from `fxcarry`, and the
 book, the raw panels and the data plumbing come from the team project `FX_Carry_26_Summer_PL`.
 The setup cell below finds both from wherever it is being run, so the same file executes
@@ -833,6 +838,285 @@ distrust anyone who leads with one.
 
 
 cells.append(md(r"""
+## The instrument actually designed for this
+
+Everything so far hedges by holding less. That is a strange way to buy crash protection when
+there is an instrument built for it, and when the option market has been quoting a price for
+the exact risk these models are trying to dodge the whole time.
+
+The quoted surface gives three points per currency and tenor: the at-the-money volatility, the
+risk reversal, and the butterfly, at the 25 and 10 delta wings. The team panel carries every
+point for 21 of the book's 27 currencies, missing the six EM names whose options were never
+downloaded. `vol_surface_panel` returns the risk reversal already sign-normalised so that
+positive means FX puts are rich against calls, which is the direction that hurts a long carry
+position, so the volatility at a put wing is the at-the-money level plus the butterfly plus half
+the risk reversal.
+
+Turning that into a price takes a model, because a delta is a coordinate rather than a
+moneyness. `fxcarry.options.Black76` does both halves: `strike_from_delta` inverts the quoted
+delta into a strike, and `value` prices the option on the forward. Writing the option on the
+forward rather than on spot is what keeps the two interest rates out of it, since the outright
+forward has already priced their difference. The one rate that survives is the base currency's,
+which enters the delta, and under covered interest parity that is the dollar rate plus the
+carry the panel already reports.
+
+Two things to hold on to about what follows. Everything is priced at mid, because the panel
+carries option mids and no bid/ask, so every premium below is a floor on what it would really
+cost. And a premium paid cannot go through the base's exposure hook, which moves weights rather
+than returns, so this section prices the hedge rather than backtesting it.
+"""))
+
+
+cells.append(code(r"""
+from fxcarry.options import Black76
+
+TENOR_YEARS = 1 / 12
+MODEL = Black76()
+ATM = fx.vol_surface_panel("ATM", "1M")
+
+
+def wing_vol(delta):
+    # Volatility at a put wing: at-the-money, plus the butterfly, plus half the risk reversal.
+    # The panel's risk reversal is already crash-positive, so the put wing takes +RR/2 where
+    # the raw market convention would write -RR/2.
+    rr = fx.vol_surface_panel("RR", "1M", delta)
+    bf = fx.vol_surface_panel("BF", "1M", delta)
+    shared = ATM.columns.intersection(rr.columns).intersection(bf.columns)
+    return (ATM[shared] + bf[shared] + rr[shared] / 2.0) / 100.0
+
+
+spot, carry = base.panels.spots, base.panels.carry
+forward = spot * np.exp(-carry * TENOR_YEARS)              # carry is ln(S/F), annualised
+usd_rate = (fx.load_wide("usd_riskfree")["USGG3M"] / 100.0).reindex(spot.index).ffill()
+base_rate = carry.add(usd_rate, axis=0)                    # parity: foreign = dollar + carry
+HEDGED = [c for c in base.weights.columns if c in wing_vol(25).columns]
+print(f"option coverage: {len(HEDGED)} of {base.weights.shape[1]} currencies")
+print("no quotes for:", sorted(set(base.weights.columns) - set(HEDGED)))
+
+
+def put_premium(delta):
+    # Premium of one out-of-the-money put, per unit of capital deployed. A unit of capital
+    # buys 1/F of face at the forward, so the price divides by the same forward.
+    vol = wing_vol(delta)[HEDGED].reindex(spot.index).ffill()
+    fwd = forward[HEDGED]
+    strike = MODEL.strike_from_delta(delta / 100.0, "put", fwd, vol, TENOR_YEARS,
+                                     base_rate=base_rate[HEDGED])
+    discount = pd.DataFrame(
+        np.repeat(np.exp(-usd_rate * TENOR_YEARS).to_numpy()[:, None], len(HEDGED), axis=1),
+        index=spot.index, columns=HEDGED)
+    price = MODEL.value("put", fwd, strike, vol, TENOR_YEARS, discount=discount)
+    return price / fwd, strike, vol
+
+
+premium_25, strike_25, vol_25 = put_premium(25)
+premium_10, _, _ = put_premium(10)
+STRUCTURES = {"outright 25d put": premium_25, "25/10 put spread": premium_25 - premium_10}
+"""))
+
+
+cells.append(code(r"""
+# The strike has to reprice to the delta it came from, or the inversion is wrong.
+recovered = MODEL.delta("put", forward[HEDGED], strike_25, vol_25, TENOR_YEARS,
+                        base_rate=base_rate[HEDGED])
+print(f"delta recovered from the fitted strike: "
+      f"min {recovered.stack().min():.4f}, max {recovered.stack().max():.4f} (target -0.25)")
+
+pd.DataFrame({
+    "forward": forward[HEDGED].iloc[-1],
+    "put vol": vol_25.iloc[-1],
+    "strike": strike_25.iloc[-1],
+    "strike / forward": (strike_25 / forward[HEDGED]).iloc[-1],
+    "premium %": 100 * premium_25.iloc[-1],
+    "spread premium %": 100 * (premium_25 - premium_10).iloc[-1],
+}).dropna().round(4).head(12)
+"""))
+
+
+cells.append(md(r"""
+## What it costs, and whether the regime models buy it any cheaper
+
+The premium below is charged against the long leg of the book, rolled monthly, sized to whatever
+the leg actually holds. `always` pays it every month. The other rows pay it in proportion to
+each real-time regime probability, which is the natural way to make a hedge conditional on a
+state rather than on a calendar.
+
+The last column is the one to read. It divides what a policy paid by what the same number of
+months would have cost bought blind, so it asks whether the model is picking cheap moments to
+insure or merely insuring less often.
+"""))
+
+
+cells.append(code(r"""
+long_leg = base.weights[HEDGED].clip(lower=0.0).resample("ME").last()
+book_return = headline.loc["baseline", "ann_return"]
+
+drag_rows = {}
+for structure, premium in STRUCTURES.items():
+    cost = (long_leg * premium.resample("ME").last()).sum(axis=1, min_count=1).dropna()
+    drag_rows[(structure, "always")] = {"drag": 12 * cost.mean(), "months paid": 1.0}
+    for label in SPECS:
+        prob = paths[(label, "realtime")].probability.reindex(cost.index).fillna(0.0)
+        drag_rows[(structure, f"when {label} says so")] = {
+            "drag": 12 * (cost * prob).mean(), "months paid": prob.mean()}
+
+drag = pd.DataFrame(drag_rows).T
+drag.index = pd.MultiIndex.from_tuples(drag.index, names=["structure", "timing"])
+always_cost = drag.xs("always", level="timing")["drag"]
+drag["% of capital a year"] = 100 * drag["drag"]
+drag["share of book return"] = drag["drag"] / book_return
+drag["unit cost vs always"] = [
+    row["drag"] / (row["months paid"] * always_cost[structure]) if row["months paid"] > 0 else np.nan
+    for (structure, _), row in drag.iterrows()]
+
+print(f"the book earns {100 * book_return:.2f}% a year")
+drag[["% of capital a year", "months paid", "share of book return", "unit cost vs always"]].round(3)
+"""))
+
+
+cells.append(code(r"""
+fig, ax = plt.subplots(figsize=(10, 4.2))
+ax.axvline(100 * book_return, color=PALETTE[0], lw=2.0, zorder=1)
+ax.annotate(f"what the book earns, {100 * book_return:.1f}%", xy=(100 * book_return + 0.15, -0.45),
+            fontsize=9, color=PALETTE[0], va="bottom")
+labels = list(drag.xs("outright 25d put", level="structure").index)[::-1]
+for (structure, colour, marker) in (("outright 25d put", PALETTE[2], "o"),
+                                    ("25/10 put spread", PALETTE[3], "D")):
+    values = drag.xs(structure, level="structure").loc[labels, "% of capital a year"]
+    ax.scatter(values, range(len(labels)), s=52, color=colour, marker=marker, label=structure,
+               zorder=3, edgecolor="white", linewidth=0.8)
+ax.set_ylim(-0.9, len(labels) - 0.3)
+ax.set_yticks(range(len(labels)))
+ax.set_yticklabels(labels)
+ax.set_xlabel("premium paid, % of capital a year, at mid")
+ax.set_title("Crash insurance on the long leg, against what the book makes")
+ax.legend(loc="lower right")
+ax.grid(axis="y", visible=False)
+fig.tight_layout()
+plt.show()
+"""))
+
+
+cells.append(md(r"""
+Hedging the long leg outright, every month, costs 9.2% of capital a year against a book that
+earns 5.2%. The insurance is roughly twice the strategy. Selling the 10 delta wing back to fund
+part of it brings that to 5.7%, which is still more than the book makes. At mid, with no bid,
+no offer and no slippage. Whatever else is true, continuously buying this protection is not a
+strategy, it is a way of donating the carry to the option market.
+
+Making the hedge conditional does cut the bill, and roughly in proportion to how often it pays.
+`Vol-rank` insures a third of the months and pays about a third as much. That is the arithmetic
+of buying less, not of buying better.
+
+The last column separates those two. For four of the five models it sits just above one, between
+1.01 and 1.04, meaning a month of protection bought on the model's say-so costs a few percent
+more than a month bought at random. This is not a defect in the models. It is what they are
+selecting on. The states they identify as stressed are the states where implied volatility is
+already elevated, and elevated implied volatility is the price of the option going up. You
+cannot time your way into cheap crash insurance, because the option market is reading the same
+volatility the regime model is, and it repriced first.
+
+`Logit` is the exception at 0.95, and consistently with its negative correlation to every
+volatility measure earlier, it is the one model whose stress signal is not simply high
+volatility. A five percent discount on insurance is not a strategy either, but it is the only
+sign anywhere in this notebook that a regime model saw something the option market had not
+already charged for.
+
+`MS-fxvol` shows 1.77, which I would not read into: it pays in 0.7% of months, so the number
+rests on barely more than a dozen observations.
+"""))
+
+
+cells.append(md(r"""
+## The version that is actually affordable
+
+If the premium cannot be paid, the remaining option is to use what the option market is saying
+without buying anything from it. Trimming a long position is a crude substitute for owning a put
+on it: it gives up the upside as well as the downside and it protects nothing below the trim,
+but it costs a bid/ask spread on the forward instead of a volatility premium, and the panel can
+price that honestly.
+
+This goes through the base's `weight_overlay` hook, so it is a real book rather than a costing
+exercise. The rule halves long positions in currencies whose crash insurance is in the top
+quintile of its own trailing three years, judged only against data available at the time. The
+conditional versions do the same thing with a depth that follows each regime probability,
+rescaled so the average trim matches the static rule's. Without that rescaling the comparison
+would once again be measuring how much each rule hedges rather than when.
+"""))
+
+
+cells.append(code(r"""
+RISK_REVERSAL = fx.vol_surface_panel("RR", "1M", 25)
+
+
+def expensive_longs(weights, ctx):
+    # Where crash insurance sits in its own trailing three years, month-end and lagged one day,
+    # the same no-lookahead convention the signal uses.
+    rank = RISK_REVERSAL.reindex(weights.index).ffill().rolling(756, min_periods=378).rank(pct=True)
+    rank = rank.resample(ctx.config.rebal).last().reindex(weights.index, method="ffill").shift(1)
+    return (rank.reindex(columns=weights.columns) > 0.80).fillna(False) & (weights > 0)
+
+
+def static_trim(weights, ctx):
+    scale = pd.DataFrame(1.0, index=weights.index, columns=weights.columns)
+    scale[expensive_longs(weights, ctx)] = 0.5
+    return weights * scale
+
+
+def timed_trim(probability, depth=0.5):
+    # Same rule, depth following the regime probability, normalised to the static rule's
+    # average so the difference reads as timing rather than as hedging more.
+    scaled = (probability / probability.mean()).clip(upper=1.0 / depth)
+
+    def overlay(weights, ctx):
+        daily = scaled.reindex(weights.index, method="ffill").shift(1).fillna(0.0)
+        cut = pd.DataFrame(np.repeat((depth * daily).to_numpy()[:, None], weights.shape[1], axis=1),
+                           index=weights.index, columns=weights.columns)
+        scale = pd.DataFrame(1.0, index=weights.index, columns=weights.columns)
+        return weights * scale.mask(expensive_longs(weights, ctx), 1.0 - cut)
+
+    return overlay
+
+
+option_runs = {"baseline": base,
+               "static option trim": run(weight_overlay=static_trim, name="static_trim")}
+for label in SPECS:
+    option_runs[f"trim timed by {label}"] = run(
+        weight_overlay=timed_trim(paths[(label, "realtime")].probability), name=f"trim_{label}")
+
+option_table = lab.variant_table(option_runs, benchmark=None)
+option_comparison = Comparison({k: v.net for k, v in option_runs.items()}, 252.0, "baseline")
+option_comparison.save(OUT / "option_returns_net_daily.parquet")
+option_table["dd at equal vol"] = Comparison(option_comparison.rescaled(), 252.0,
+                                             "baseline").table()["max_drawdown"]
+option_table["avg notional"] = [lab.average_exposure(r) for r in option_runs.values()]
+option_table[["gross_sharpe", "net_sharpe", "ann_return", "ann_vol", "max_dd",
+              "dd at equal vol", "skew", "cvar_95", "avg notional"]].round(4)
+"""))
+
+
+cells.append(md(r"""
+The static rule is the first thing in this notebook that buys a better tail without simply
+holding less. It gives up 0.010 of Sharpe, which is a tenth of what the cheapest regime gate
+cost, and in exchange the worst drawdown goes from 29.3% to 27.6%, the skew improves from
+$-0.648$ to $-0.605$, and the 5% conditional loss falls. Most of that survives the equal
+volatility test, at 28.9% against 29.3%, and it should, because the rule barely changes the size
+of the book: average gross notional is 3.13 against 3.23. It is trimming specific currencies at
+specific times rather than standing down.
+
+Timing it by regime makes it worse in every case. The five conditional versions run from 0.368
+to 0.460 in net Sharpe, all below the static rule's 0.456 except `MS-fxvol`, which is a near
+no-op and lands at 0.460. The spread across the five is wider than the effect being measured,
+which is the same pattern as the gate sweep and it means the same thing: the choice of timing
+model is doing more work than the timing.
+
+There is one honest complication. `MS-equity` timing gives the deepest drawdown improvement of
+anything here, 26.6% as run and 27.3% at equal volatility, better than the static rule, at a
+cost of 0.030 more Sharpe. If drawdown is what you are buying, that trade exists. I would not
+lead with it off one cell of a five-cell table.
+"""))
+
+
+cells.append(md(r"""
 ## Where this leaves the book
 
 Regime gating does not improve this carry book on this sample, and the failure is not marginal.
@@ -848,29 +1132,55 @@ noticing, recovers about half of the illusion. A second and quieter channel runs
 specification: choosing which fitted state to call stressed swings `MS-fxvol` from 0.463 to
 0.605, and that choice leaves no trace in any out-of-sample statistic.
 
-Two things are worth carrying forward. The first is a data constraint with a price attached.
+Moving from exposure to options does not rescue it, and the reason is a price rather than a
+model. Buying the 25 delta put on the long leg every month costs 9.2% of capital a year against
+a book earning 5.2%, and funding it with the 10 delta wing only brings that to 5.7%. Both at
+mid. Conditioning the purchase on a regime state cuts the bill roughly in proportion to how
+often it pays, and the protection it buys costs a few percent more per month than protection
+bought blind, because the states these models call stressed are the states where implied
+volatility has already risen. The option market reads the same volatility and reprices first.
+Whatever a regime model knows about crashes, it is not something it can buy cheaply.
+
+Three things are worth carrying forward. The first is a data constraint with a price attached.
 The shared panel starts in 2007, a regime model needs three to seven years of burn-in, and so
 no honest gate in this notebook was armed during the 2008 unwind. Risk-factor history back to
 the 1990s would let a model face a crisis it had not already been fitted on, and until that
 exists any claim about regime models and carry crashes rests on two events, one of which is
 inside the training window.
 
-The second is that the simple rule already in the repository is the only construction that
-improves anything. Half the exposure when FX-relevant volatility is in the top fifth of its
-trailing three years, and you keep the baseline's Sharpe while cutting the equal-risk drawdown
-from 29.3% to 25.8%. It has one parameter, it needs no estimation, and it arms from the first
-day there is enough history to rank against. That is a smaller claim than a Markov chain, and
-on this evidence it is the one I would defend.
+The second is that every option number here is a floor. The panel carries option mids with no
+bid or offer, so a premium-paying hedge cannot yet be charged what it would really cost. That
+does not change the conclusion, since a hedge already costing more than the book earns only
+looks worse with a spread on it, but it does mean the affordable structures cannot be ranked
+against each other properly until that data exists.
+
+The third is what to run. The two constructions that improve anything are both simple and
+neither estimates a state. Halving exposure when FX volatility is in the top fifth of its
+trailing three years keeps the baseline's Sharpe and cuts the equal-risk drawdown from 29.3% to
+25.8%. Halving the position in currencies whose crash insurance is in the top fifth of its own
+trailing three years costs 0.010 of Sharpe and improves the drawdown, the skew and the
+conditional loss together, while barely changing the size of the book. Both read the same
+thing the Markov chains were estimating, both arm from the first day there is enough history to
+rank against, and between them they have two parameters. On this evidence that is where I would
+put the risk budget.
 """))
 
 
 cells.append(code(r"""
-summary_note = pd.DataFrame({
-    "net sharpe": headline["net_sharpe"],
-    "drawdown as run": headline["max_dd"],
-    "drawdown at equal vol": rescaled["max_drawdown"],
-    "avg notional": headline["avg notional"],
-}).round(4)
+summary_note = pd.concat([
+    pd.DataFrame({
+        "net sharpe": headline["net_sharpe"],
+        "drawdown as run": headline["max_dd"],
+        "drawdown at equal vol": rescaled["max_drawdown"],
+        "avg notional": headline["avg notional"],
+    }),
+    pd.DataFrame({
+        "net sharpe": option_table["net_sharpe"],
+        "drawdown as run": option_table["max_dd"],
+        "drawdown at equal vol": option_table["dd at equal vol"],
+        "avg notional": option_table["avg notional"],
+    }).drop("baseline"),
+]).round(4)
 summary_note.to_csv(OUT / "notebook_summary.csv")
 summary_note
 """))

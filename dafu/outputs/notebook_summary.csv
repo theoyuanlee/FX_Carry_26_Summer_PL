@@ -6,3 +6,9 @@ MS-fxvol,0.4629,-0.2918,-0.293,3.2156
 Vol-rank,0.3115,-0.2838,-0.3664,2.1695
 Logit,0.3873,-0.2359,-0.3185,2.1383
 VIX-rule (incumbent),0.4653,-0.245,-0.2582,2.986
+static option trim,0.4559,-0.2762,-0.2885,3.1313
+trim timed by MS-book,0.368,-0.3499,-0.3544,3.1588
+trim timed by MS-equity,0.4263,-0.2663,-0.2734,3.1276
+trim timed by MS-fxvol,0.4597,-0.2786,-0.2812,3.1951
+trim timed by Vol-rank,0.4097,-0.3143,-0.3247,3.1202
+trim timed by Logit,0.439,-0.2824,-0.2895,3.1581
