@@ -137,7 +137,7 @@ DEFAULT_NW_LAGS = 6  # Newey-West HAC lag default
 # the remote is a one-line edit.
 
 #: Public dataset holding the DVC objects. Read-only, and needs no account.
-DATA_REMOTE_URL = "https://huggingface.co/datasets/dafu-zhu/fxcarry-data"
+DATA_REMOTE_URL = "https://huggingface.co/datasets/dafuzhu/fxcarry-data"
 
 #: Where to go when `dvc` itself is missing.
 DVC_INSTALL_URL = "https://dvc.org/doc/install"
