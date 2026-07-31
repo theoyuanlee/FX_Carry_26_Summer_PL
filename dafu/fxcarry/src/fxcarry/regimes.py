@@ -114,6 +114,14 @@ class MarkovSwitching(RegimeModel):
     parameter set. The state labels are re-identified at every refit, since the estimator is
     free to number them differently each time and a silent flip would invert the gate.
 
+    Choose ``stressed`` from what the series *is*, before running anything. For a profit and
+    loss series the bad state is the one that loses money, ``"low_mean"``; for a series in
+    volatility changes it is the one where volatility jumps, ``"high_mean"``. ``"high_variance"``
+    reads well and is usually wrong: on a return series the higher-variance state is often
+    simply normal trading, with the quiet state doing the work of catching a handful of
+    outliers, and a gate built on it de-risks most of the sample for no reason. Picking the
+    rule that backtests best is a second helping of the hindsight this class exists to measure.
+
     Attributes:
         stressed: How to identify the stressed state — ``"high_variance"``, ``"high_mean"`` or
             ``"low_mean"``.
