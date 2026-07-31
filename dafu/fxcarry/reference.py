@@ -129,6 +129,23 @@ DAY_COUNT: dict[str, float] = {"USD": 360.0, "EUR": 360.0, "JPY": 360.0,
 DEFAULT_NW_LAGS = 6  # Newey-West HAC lag default
 
 # --------------------------------------------------------------------------
+# Where the data lives
+# --------------------------------------------------------------------------
+# The parquet pulls are tracked by DVC and never committed, so a fresh clone carries the
+# .dvc pointer files and none of the data. These strings are what the "no such file" error
+# tells the reader to do about it, and they are here rather than inline so that changing
+# the remote is a one-line edit.
+
+#: Public dataset holding the DVC objects. Read-only, and needs no account.
+DATA_REMOTE_URL = "https://huggingface.co/datasets/dafu-zhu/fxcarry-data"
+
+#: Where to go when `dvc` itself is missing.
+DVC_INSTALL_URL = "https://dvc.org/doc/install"
+
+#: What to install. The HTTP extra is what lets DVC read the remote above.
+DVC_INSTALL_HINT = 'pip install "dvc[http]"'
+
+# --------------------------------------------------------------------------
 # Option surface: tenor grid, wing deltas, quote source
 # --------------------------------------------------------------------------
 # The whole liquid forward curve plus the long end. Sparse legs come back empty.

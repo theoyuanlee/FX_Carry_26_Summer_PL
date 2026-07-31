@@ -27,6 +27,69 @@ from fxcarry import reference
 _LONG_COLUMNS = ("ticker", "date", "field", "value")
 
 
+class DataNotPulled(FileNotFoundError):
+    """A tracked parquet is not on disk, almost always because nobody has pulled it yet.
+
+    Worth its own type rather than a bare ``FileNotFoundError`` because the fix is specific
+    and unguessable: the file is not missing, it is unmaterialised, and the pointer next to
+    it says so.
+    """
+
+
+def _dvc_root(path: Path) -> Path | None:
+    """Nearest ancestor holding a ``.dvc`` directory, which is where a pull has to be run."""
+    resolved = path if path.is_absolute() else Path.cwd() / path
+    for parent in resolved.resolve().parents:
+        if (parent / ".dvc").is_dir():
+            return parent
+    return None
+
+
+def _data_not_pulled(path: Path) -> DataNotPulled:
+    """The error to raise when a parquet is absent, with the fix spelled out.
+
+    Whoever hits this is usually running someone else's notebook on a fresh clone, so the
+    message has to carry the whole recipe: which directory to stand in, what to type, where
+    the bytes come from, and what to do when the tool is not installed either.
+    """
+    root = _dvc_root(path)
+    pointer = path.with_name(path.name + ".dvc")
+    lines = [f"No data file at {path}."]
+
+    if pointer.is_file():
+        lines.append(
+            f"Its DVC pointer ({pointer.name}) is there, so the file is tracked and simply "
+            "has not been pulled yet."
+        )
+    else:
+        lines.append(
+            "fxcarry keeps its pulls under DVC rather than in git, so a fresh clone has the "
+            "pointer files and none of the parquet."
+        )
+
+    where = root if root is not None else "the folder containing .dvc"
+    lines += [
+        "",
+        "To fetch it:",
+        f"    cd {where}",
+        "    dvc pull",
+        "",
+        f"The default remote is the public dataset {reference.DATA_REMOTE_URL},",
+        "so this needs no account and no credentials.",
+        "",
+        f"If dvc is not installed:  {reference.DVC_INSTALL_HINT}",
+        f"Other ways to install it: {reference.DVC_INSTALL_URL}",
+    ]
+
+    if root is None:
+        lines += [
+            "",
+            "Note: no .dvc directory was found above this path, so either you are outside the "
+            "project or the path itself is wrong.",
+        ]
+    return DataNotPulled("\n".join(lines))
+
+
 def _resample_alias(freq: str) -> str:
     """Public frequency code mapped to an offset alias this pandas build accepts."""
     alias = reference.RESAMPLE_ALIAS.get(freq, freq)
@@ -264,6 +327,8 @@ class ParquetSource(QuoteSource):
         if self._frame is None:
             frames = []
             for path in self._paths:
+                if not path.exists():
+                    raise _data_not_pulled(path)
                 # Arrow hands date32 back as Python date objects, which is ruinous on a
                 # sixteen-million-row pull; date_as_object=False lands datetime64 directly.
                 raw = pq.read_table(path).to_pandas(date_as_object=False)
