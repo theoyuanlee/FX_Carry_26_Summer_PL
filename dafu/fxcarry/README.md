@@ -152,6 +152,14 @@ The short version:
    ANCHORS OK against the committed outputs. See `research/README.md` for the order to run
    them in.
 
+5. `notebooks/05_regime_switching_carry.ipynb` puts five regime models on the team project's
+   shared carry book and asks what each is worth once it may only use data available at the
+   time. It is the one notebook here that needs a second checkout: the estimators come from
+   this library, the book and the raw panels from `FX_Carry_26_Summer_PL`. Keep the two
+   repositories side by side, or set `FX_CARRY_PL_ROOT`. Rebuild it with
+   `python scripts/notebooks/build_regime_switching.py`, which writes the same notebook here
+   and into that project's `dafu/` folder so the two copies cannot drift.
+
 ### Library layout
 
 | module | what it is for |
@@ -164,6 +172,8 @@ The short version:
 | `options.py` | `PricingModel`, `Instrument`, `Overlay`: pricing, positions and hedges |
 | `strategy.py` | `Signal`, `Weighting`, `CostModel`, `Book`: a view turned into returns |
 | `stats.py` | `Performance`, `HAC`, `FactorModel`, `LinearSDF`, and friends |
+| `regimes.py` | `MarkovSwitching`, `TrailingPercentile`, `LogisticRegime`: which state the world is in, and the gates that turn that into exposure |
+| `compare.py` | `Comparison`: several books on one window, scored together and saved as one file |
 
 Everything is in dollars per foreign currency unit, so a rise in a rate means the foreign
 currency gained. Volatilities cross the library boundary as decimals. `Book` performs the one
