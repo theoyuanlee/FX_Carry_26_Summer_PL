@@ -1,0 +1,8 @@
+,net sharpe,drawdown as run,drawdown at equal vol,avg notional
+baseline,0.4659,-0.2932,-0.2932,3.2318
+MS-book,0.3022,-0.3541,-0.3852,2.8183
+MS-equity,0.2695,-0.2497,-0.3091,2.3299
+MS-fxvol,0.4629,-0.2918,-0.293,3.2156
+Vol-rank,0.3115,-0.2838,-0.3664,2.1695
+Logit,0.3873,-0.2359,-0.3185,2.1383
+VIX-rule (incumbent),0.4653,-0.245,-0.2582,2.986

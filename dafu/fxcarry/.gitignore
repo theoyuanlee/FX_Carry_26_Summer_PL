@@ -1,0 +1,43 @@
+# Data — never commit (NDA; reuse the shared raw parquet instead).
+# Note: do NOT blanket-ignore data/ itself -- that would also hide the
+# small *.dvc pointer files (and DVC's own auto-generated nested
+# .gitignore entries) that DVC needs to commit to git. git cannot
+# re-include files inside an already-ignored parent directory, so the
+# extension-based rules below are what actually keep the raw blobs out.
+*.parquet
+*.xlsx
+*.csv
+
+# Exception: external, public, non-Bloomberg reference data (Ken French, FRED)
+# is small, permanent and freely redistributable, so it is committed to git
+# (not DVC/Box). Rebuild it with scripts/fetch_external_data.py.
+!data/external/
+!data/external/*.parquet
+
+# Python / env
+__pycache__/
+*.egg-info/
+.venv/
+.ipynb_checkpoints/
+build/
+dist/
+
+# LaTeX build artifacts. The compiled .pdf is deliberately not here -- doc
+# PDFs are committed (docs/slides/, docs/notes/pdf/).
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.toc
+*.synctex.gz
+*.bbl
+*.blg
+*.nav
+*.snm
+*.vrb
+
+# Secrets / OS
+.env
+.DS_Store
+Thumbs.db
