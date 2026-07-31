@@ -1,0 +1,19 @@
+{
+  "baseline_net_sharpe": 0.46592326747832263,
+  "baseline_gross_sharpe": 0.6284423467928696,
+  "baseline_max_dd": -0.29318494205516377,
+  "window": [
+    "2007-05-01",
+    "2026-06-30"
+  ],
+  "n_days": 5001,
+  "n_months": 230,
+  "n_features": 12,
+  "loss_month_share": 0.4260869565217391,
+  "universe": 27,
+  "n_models": 5,
+  "best_realtime": "VIX-rule (incumbent)",
+  "best_realtime_sharpe": 0.46527268926193105,
+  "armed_from": "2012-07-31",
+  "runtime_s": 293.5
+}
