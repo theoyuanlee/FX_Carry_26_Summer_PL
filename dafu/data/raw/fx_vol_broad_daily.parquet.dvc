@@ -1,0 +1,5 @@
+outs:
+- md5: 910ec5f2d5abd9977c7e8f87d203c6b4
+  size: 4816036
+  hash: md5
+  path: fx_vol_broad_daily.parquet

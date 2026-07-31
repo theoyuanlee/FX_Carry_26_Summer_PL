@@ -1,0 +1,5 @@
+outs:
+- md5: fc9617ad1f53c52787fff58afc291f23
+  size: 1983877
+  hash: md5
+  path: fx_short_rate_daily.parquet

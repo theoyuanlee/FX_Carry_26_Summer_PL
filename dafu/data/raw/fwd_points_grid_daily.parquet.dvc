@@ -1,0 +1,5 @@
+outs:
+- md5: 646b6e9f74d369e62c849d9909f03bd7
+  size: 8044761
+  hash: md5
+  path: fwd_points_grid_daily.parquet

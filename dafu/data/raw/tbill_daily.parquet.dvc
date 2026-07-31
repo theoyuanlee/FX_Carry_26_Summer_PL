@@ -1,0 +1,5 @@
+outs:
+- md5: ca41e36cad2a2d2d3c4f3975b988b893
+  size: 83812
+  hash: md5
+  path: tbill_daily.parquet

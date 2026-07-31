@@ -1,0 +1,4 @@
+[core]
+    remote = box-remote
+['remote "box-remote"']
+    url = webdav://127.0.0.1:8080
