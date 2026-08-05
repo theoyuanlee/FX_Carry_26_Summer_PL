@@ -20,7 +20,7 @@ The contract this file enforces:
 A separate file from `test_reconciliation.py` on purpose: that runner collects
 `test_*` from its own `globals()`, so adding cases there would turn the
 documented "12/12 passed" — quoted in the README, in agent rule 3 and in
-`overview.html` — into "17/17".
+`cesare/presentations/overview.html` — into "17/17".
 
 Run directly (`python strategy/tests/test_overlays.py`) or under pytest.
 """

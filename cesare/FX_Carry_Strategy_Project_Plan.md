@@ -486,7 +486,7 @@ on its pessimistic side and vindicates the baseline's inverse-vol choice.
 backtest §3 regressions, and a falsifiable verdict all exist
 (`cesare/momentum_overlay.ipynb` → `outputs/stage5_momentum_comparison.csv` +
 `outputs/stage5_track_correlation.csv`). Reference: Burnside–Eichenbaum–Rebelo (2011) and
-Menkhoff et al. (2012b), in `papers/`.
+Menkhoff et al. (2012b). BER is in `papers/`; Menkhoff (2012b) is not held locally (Appendix C #34).
 
 **What exists**
 
@@ -731,6 +731,7 @@ fx_utils docstring paths`).
       starts. `openpyxl` belongs to `src/convert_extra_xlsx.py`, and the optional `requirements-bbg.txt`
       (xbbg/blpapi) covers the `src/` Bloomberg pull — both **outside `cesare/`**, deferred to the
       repo-wide collation.
+      **Superseded and deleted 2026-08-05** — see the hygiene pass in §14.6.
 - [x] **.gitignore** — no folder-local `cesare/.gitignore` needed: the root `.gitignore` already
       ignores `__pycache__/`, `.ipynb_checkpoints/`, `.DS_Store` repo-wide and nothing under
       `cesare/` is mis-tracked (the `__pycache__` build cache is untracked). Plan-file exclusion was
@@ -765,8 +766,43 @@ the same mistake §15 already routed around once.)*
       shared `notebooks/` folder rather than in `cesare/`, so it is not mine to remove, and it costs
       nothing. Recorded so the question stops being reopened.
 
-Per-folder `README.md` / `requirements.txt` files are left in place: they are each owner's
-description of their own work, and the root pair now supersedes them for environment setup.
+Per-folder `README.md` files are left in place: they are each owner's description of their own work.
+Per-folder `requirements.txt` files are superseded by the root file for environment setup —
+`cesare/requirements.txt` was deleted on 2026-08-05 once it was shown to have drifted (§14.6).
+
+### 14.6 `strategy/` + `cesare/` cleanup ✅ **done 2026-08-05**
+
+*A legibility pass on the two folders I own, scoped to them. Nothing was written to a teammate's
+folder; the four suites and every acceptance number are unchanged.*
+
+- [x] **Decks grouped** — `cesare/presentations/` now holds all three: `deck_2026_08_05.html`
+      (generated), `overview.html` (moved out of `strategy/`, which is a Python package and should
+      not hold a slide deck) and `FX_Carry_Update_Presentation.html`, with a README saying which is
+      generated and which numbers are dated. `build_deck.py`'s `DECK` constant follows.
+- [x] **`cesare/requirements.txt` deleted.** It was not merely redundant with the root file, it was
+      **wrong**: its own header records that it was grepped from `fx_utils.py` and the seven stage
+      notebooks, so it predates every Phase-3/4 module and omitted **scikit-learn**, which
+      `tail_forecast.py` imports. Two files that must be hand-synced is how it broke; the root file
+      is now the only environment spec. No teammate file referenced it.
+- [x] **`deck_2026_08_05.md` → `notes/deck_2026_08_05_draft.md`.** The Aug-3 markdown draft of a deck
+      that is now generated as HTML. Superseded on its face — its "what is next" lists the combined
+      engine and the tail forecast as future work, both since shipped, and it quotes 23 tests where
+      there are now 48. Kept as raw material, out of the folder's top level.
+- [x] **`cesare/README.md` rewritten.** The old one documented 12 of 26 top-level entries — no
+      Phase-3/4 module, neither deck, no `notes/`, and "26 committed result CSVs" against an actual
+      59. It now maps the whole folder and states the two couplings that make it un-restructurable:
+      the `fx_utils.py` shim (eight consumers in `arjun/`, which is read-only to me) and
+      `combined_engine.py` (imported by `strategy/config.py`).
+- [x] **`cesare/outputs/README.md` created** — an index by producer covering all 59 CSVs, pointing at
+      Appendix A for the per-file description rather than restating it, so the two cannot drift.
+- [x] **`strategy/README.md` reconciled to the shipped base.** The base's written contract had no
+      mention of `test_combined.py`, the 8/8 suite or the `COMBINED` preset, although `config.py`
+      ships `PRESETS["COMBINED"]` and this document, the root README and `report/README.md` all
+      quote four suites / 48 tests. Fixed in five places, and a `COMBINED` section added.
+- [x] **Nothing else moved.** Every `cesare/` module resolves `OUTPUTS` from
+      `Path(__file__).resolve().parent` and the nine notebooks `import fx_utils` as a bare top-level
+      module with cwd `cesare/`, so subdividing the folder would break both. The legibility problem
+      was the README, not the file count.
 
 ## 15. Sequencing — the August runway (2026-08-03 → 2026-08-31)
 
@@ -902,8 +938,10 @@ Two upgrades would harden (or genuinely retest) the null:
    slope is a good cross-sectional proxy for risk-neutral skewness and a nearly useless time-series one*, which
    is exactly why a cross-sectional sort was insensitive to the upgrade and why anyone using RR as a
    **timing** signal should not.
-   Outputs: `p3_d1_bkm_comparison.csv`, `p3_d1_bkm_spanning.csv`, `p3_d1_bkm_signal_agreement.csv`,
-   `p3_d1_bkm_skew_panel.csv`, `p3_d1_bkm_clipped_mass.csv`.
+   Outputs: `p3_d1_bkm_comparison.csv`, `p3_d1_bkm_spanning.csv`, `p3_d1_bkm_signal_agreement.csv`
+   (all three written by `d1_bkm_rerun.py`); `p3_d1_bkm_skew_panel.csv`, `p3_d1_bkm_clipped_mass.csv`
+   (the two QA panels — exported by hand from `bkm_skew.bkm_skew_diagnostics("1M", "ME")`, not
+   written by any module; see Appendix C #35).
 2. **Full-27 universe (purchase).** Adding option surfaces for the 6 currently-optionless EM (CLP/COP/IDR/MYR/PEN/PHP,
    shopping list §2.2) would let D1 run on the full tradable 27 instead of the matched U21.
 
@@ -1381,7 +1419,7 @@ next" beats of any BofA deck (Jul 17 ask).
 | Ask (date) | Owner | Status | Note |
 |---|---|---|---|
 | Fold all workstream takeaways into one combined engine (Jul 22, ongoing) | Team | ✅ **done 2026-08-03 (W2–W3)** | `run("COMBINED")` — baseline + Arjun's duration leg + Theo's bad-skew exclusion: net **0.4891**, MaxDD **−19.07%**, CVaR₉₉ **0.0200**. All four components **re-priced from committed outputs**, not waiting on ports. Both ladders + survivor re-ladder in `p4_combined_ladder.csv`. §19.4 |
-| Group slide deck; results-ready, four beats, visible collaboration (Jul 15, Jul 17) | Team | ✅ recurring | Precedent exists: `cesare/FX_Carry_Update_Presentation.html`, `strategy/overview.html`. This ledger + §19.5 supply the content each week |
+| Group slide deck; results-ready, four beats, visible collaboration (Jul 15, Jul 17) | Team | ✅ recurring | Precedent exists: `cesare/presentations/FX_Carry_Update_Presentation.html`, `cesare/presentations/overview.html`. This ledger + §19.5 supply the content each week |
 | Per-member methodology justification — the "why", not the output (Jul 17) | All | ⬜ | Collected in W4 as §14.3 report input |
 | **Capture Arjun's idea from Jul 22** | **Cesare** | ⬜ **overdue — carried a third time** | Still unrecorded. Ask at the Aug 5 meeting and write it into this ledger. Flagged here as the one action item this document has failed to close three cycles running |
 | Distinct strategy ownership, no overlap (Jul 10) | All | ⚠️ | One live breach: the Theo/Cesare skew collision above. Resolve W1 |
@@ -1390,7 +1428,7 @@ next" beats of any BofA deck (Jul 17 ask).
 
 **What exists and why it isn't enough.** Two episode sets are already in the repo and they disagree:
 `dafu/regime_lab.py` `EPISODES` (9 contiguous windows) and the six windows hard-coded in
-`strategy/overview.html` / `strategy/examples/05_subset_and_crisis.py`. Neither is canonical, neither
+`cesare/presentations/overview.html` / `strategy/examples/05_subset_and_crisis.py`. Neither is canonical, neither
 contains the 2026 shocks the desk named, and neither is required of anyone.
 
 > **Blocker found and verified 2026-08-03 — ✅ FIXED the same day (Appendix C #13).**
@@ -1895,10 +1933,10 @@ Saying this explicitly is what keeps the four-week schedule honest.
 | ✅ `p4_component_standalone.csv` · ✅ `p4_component_by_episode.csv` | `combined_engine.standalone`, §19.4 | each teammate component re-priced on the base, one change at a time, each against its own stated bar, with the `reconstruction` method recorded per row |
 | ✅ `p4_combined_ladder.csv` · ✅ `p4_combined_by_episode.csv` | `combined_engine.ladder`, §19.4 | `add` / `loo` / `final` / `final_loo` ladders, NW alpha vs previous rung, per-window win counts, slot verdict and `ladders_agree` |
 | ✅ `p4_selection_vs_derisking.csv` | `combined_engine.selection_vs_derisking`, §6.12 | the gross-matched control: how much of a trimming overlay's tail gain is selection vs simply holding less |
-| ✅ `p3_d1_bkm_comparison.csv` · ✅ `p3_d1_bkm_spanning.csv` · ✅ `p3_d1_bkm_signal_agreement.csv` · ✅ `p3_d1_bkm_skew_panel.csv` · ✅ `p3_d1_bkm_clipped_mass.csv` | `bkm_skew.py` + `d1_bkm_rerun.py`, §17.1 | the D1 rerun on model-free Breeden–Litzenberger/BKM skewness from the 5-point smile: battery vs the 25Δ proxy, two-way spanning, proxy-vs-model-free agreement (levels 0.886, changes 0.0198), the monthly skew panel and the integration-clipping diagnostic |
+| ✅ `p3_d1_bkm_comparison.csv` · ✅ `p3_d1_bkm_spanning.csv` · ✅ `p3_d1_bkm_signal_agreement.csv` (`d1_bkm_rerun.py`) · ✅ `p3_d1_bkm_skew_panel.csv` · ✅ `p3_d1_bkm_clipped_mass.csv` (**hand-exported** from `bkm_skew.bkm_skew_diagnostics("1M","ME")` — no module writes these two, Appendix C #35) | `bkm_skew.py` + `d1_bkm_rerun.py`, §17.1 | the D1 rerun on model-free Breeden–Litzenberger/BKM skewness from the 5-point smile: battery vs the 25Δ proxy, two-way spanning, proxy-vs-model-free agreement (levels 0.886, changes 0.0198), the monthly skew panel and the integration-clipping diagnostic |
 | ✅ `p3_d2_premium.csv` · ✅ `p3_d2_books.csv` · ✅ `p3_d2_spanning.csv` · ✅ `p3_d2_correlation.csv` · ✅ `p3_d2_static_vs_timing.csv` · ✅ `p3_d2_avg_weights.csv` · ✅ `p3_d2_breakeven_cost.csv` · ✅ `p3_d2_by_episode.csv` | `d2_vrp.py`, §17.4 | the FX volatility risk premium: per-currency premium and NW t, the four books, two-way spanning vs carry, the standing-tilt-vs-timing split, average weights, the breakeven vol spread grid, and **the per-window table (added 2026-08-04 — it was cited but never written, Appendix C #30)** |
 | ✅ `final_comparison.csv` · ✅ `final_comparison_by_episode.csv` | `final_evaluation.final_comparison{,_by_episode}`, §14.2 | every named variant across all workstreams, whole-sample (**232 rows, 7 owners, 5 not on base, 0 duplicate keys**) and per window (**652 rows, 38 variants, 6 gaps recorded as explicit rows**). Two metric conventions coexist and must not be compared across: `daily_net` and `monthly_uncosted` (D2) |
-| ✅ `deck_2026_08_05.html` | `cesare/build_deck.py` | the Aug 5 BofA progress deck — one self-contained HTML file, 7 matplotlib figures inlined as SVG, every number read from a committed CSV and asserted against `run()` before the page is written |
+| ✅ `presentations/deck_2026_08_05.html` | `cesare/build_deck.py` | the Aug 5 BofA progress deck — one self-contained HTML file, 7 matplotlib figures inlined as SVG, every number read from a committed CSV and asserted against `run()` before the page is written. **Not in `outputs/`** — it lives with the other two decks in `cesare/presentations/` (repo hygiene, 2026-08-05) |
 
 **Deferred:** `stage7_ml_forecast_eval.csv`, `stage7_ml_strategy_stats.csv` (§13 — descoped, §19.6).
 
@@ -1916,9 +1954,9 @@ Saying this explicitly is what keeps the four-week schedule honest.
 **Phase 3 / D1 — crash-risk-premium-adjusted carry** (crash risk explains only *part* of carry; tilt,
 don't neutralize; RR direction is contested; the SRP-subsumes-carry claim is the key hypothesis — and
 it did **not** replicate here, see §17.1):
-- Jurek (2014), *Crash-Neutral Currency Carry Trades* — `papers/jurek_currency.pdf`. Crash-hedging
+- Jurek (2014), *Crash-Neutral Currency Carry Trades* — not held locally (Appendix C #34). Crash-hedging
   removes ≤35% of the carry return; fully crash-neutralizing + dollar-neutral + including 2008 → ~zero.
-- Farhi & Gabaix (2016), *Rare Disasters and Exchange Rates* — `papers/rare_disasters_and_exchange_rates`.
+- Farhi & Gabaix (2016), *Rare Disasters and Exchange Rates* — not held locally (Appendix C #34).
 - Farhi, Fraiberger, Gabaix, Rancière, Verdelhan, *Crash Risk in Currency Markets* — SSRN 1397668.
   Disaster risk ≈ one-third of the G10 carry premium; RR ∝ the currency risk premium.
 - Broll (2016), *The Skewness Risk Premium in Currency Markets* — SSRN 2775663.
@@ -2154,3 +2192,27 @@ universe, see §17.2):
     as-is rather than silently renormalised — changing a committed CSV's units to fix a
     documentation problem is how a reconciliation breaks — and recorded here plus in report ch. 8 so
     the next reader is warned.
+
+*Corrections 34–35 added 2026-08-05 during the §14.6 cleanup; both verified by execution.*
+
+34. **Three references are cited as being in `papers/` and are not.** `papers/` holds exactly two
+    PDFs — Lustig–Roussanov–Verdelhan (2011) and Burnside–Eichenbaum–Rebelo (2011). Appendix B cited
+    `papers/jurek_currency.pdf` and `papers/rare_disasters_and_exchange_rates` as local files, and
+    §11 said Menkhoff et al. (2012b) is "in `papers/`". None of the three is there, and the two
+    filenames never existed under any spelling. The citations are kept — the papers are real and the
+    arguments drawn from them stand — but the false locality claim is removed. **Same class as #12,
+    #18, #26 and #30: a "we have this" claim in this document that nobody checked.** Six of the
+    eight references in Appendix B are not held locally; `papers/` is not a bibliography.
+35. **Two committed outputs are produced by nothing.** Appendix A and §17.1 both credit
+    `p3_d1_bkm_skew_panel.csv` and `p3_d1_bkm_clipped_mass.csv` to "`bkm_skew.py` +
+    `d1_bkm_rerun.py`". Neither module writes them: `bkm_skew.py` contains no `to_csv` at all, and
+    `d1_bkm_rerun.py` writes exactly three files. They were exported by hand from
+    `bkm_skew.bkm_skew_diagnostics("1M", "ME")` and committed. **The numbers are sound** — verified
+    2026-08-05 by recomputing both from the current code: identical shape (234 × 24), identical NaN
+    pattern, `max|diff|` **4.4e-16** and **1.0e-16**, i.e. one unit in the last place. What was wrong
+    is the registry's producer claim, and the practical cost is that
+    `python cesare/d1_bkm_rerun.py` does *not* reproduce the full D1 artifact set. Fixed by stating
+    the true provenance in both places rather than by adding the two writes: at 1 ULP they would
+    rewrite a committed deliverable on every run, and churning a frozen artifact to fix a
+    documentation error is the trade #33 already declined. *"Produced by" is a testable claim too,
+    not just "exists".*

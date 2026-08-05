@@ -3,7 +3,7 @@
 Deliberately a SEPARATE file from `test_reconciliation.py`. That runner collects
 `test_*` out of its own `globals()`, so adding a case there would turn the
 documented "12/12 passed" into "13/13" and invalidate the string quoted in the
-README, in agent rule 3, and in `overview.html`. The base's twelve acceptance
+README, in agent rule 3, and in `cesare/presentations/overview.html`. The base's twelve acceptance
 tests are the base's contract; these are the episode module's.
 
 What this file enforces:

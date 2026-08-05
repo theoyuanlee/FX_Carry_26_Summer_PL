@@ -27,7 +27,7 @@ those numbers on every run, so drift gets caught immediately.
 
 | File | What it is |
 |---|---|
-| [`config.py`](config.py) | `StrategyConfig` — every knob, with the baseline as defaults. Presets `ALL_BASELINE` / `G10_BASELINE` / `EM_BASELINE`. |
+| [`config.py`](config.py) | `StrategyConfig` — every knob, with the baseline as defaults. Presets `ALL_BASELINE` / `G10_BASELINE` / `EM_BASELINE`, plus `COMBINED` (see [The `COMBINED` preset](#the-combined-preset)). |
 | [`core.py`](core.py) | `run(config) -> StrategyResult`. Orchestration only — no financial maths of its own. |
 | [`fx_utils.py`](fx_utils.py) | The engine: ~45 pure functions (data → panels → sorts → costs → stats → regressions). This is where the maths lives. |
 | [`episodes.py`](episodes.py) | The frozen evaluation windows (`ERAS`, `STRESS`) and the per-window reports built on them. See rule 11. |
@@ -36,6 +36,11 @@ those numbers on every run, so drift gets caught immediately.
 | [`tests/test_reconciliation.py`](tests/test_reconciliation.py) | 12 acceptance tests: reconciliation to committed outputs, internal identities, and no-op guards on the hooks. |
 | [`tests/test_episodes.py`](tests/test_episodes.py) | 11 tests on the frozen windows, the per-leg decomposition, and the two v1.1.0 base fixes. |
 | [`tests/test_overlays.py`](tests/test_overlays.py) | 17 tests on composition, the gross-non-increasing contract, and `ExternalLeg` P&L / costs / lag. |
+| [`tests/test_combined.py`](tests/test_combined.py) | 8 tests freezing the `COMBINED` preset: it reproduces the ladder's final row, runs the baseline's window, and stays a superset of the base. |
+
+That is the whole package: five modules, five examples, four test suites. There is nothing else in
+here — the visual overview of this base now lives with the project's other decks at
+[`../cesare/presentations/overview.html`](../cesare/presentations/overview.html).
 
 ## Setup
 
@@ -53,6 +58,7 @@ Verify your environment in one command:
 python strategy/tests/test_reconciliation.py     # expect "12/12 passed"
 python strategy/tests/test_episodes.py           # expect "11/11 passed"
 python strategy/tests/test_overlays.py           # expect "17/17 passed"
+python strategy/tests/test_combined.py           # expect "8/8 passed"
 ```
 
 ---
@@ -279,6 +285,36 @@ option hedge needs an option price, and `data/raw` carries option **mids only**.
 
 ---
 
+## The `COMBINED` preset
+
+`run("COMBINED")` is the frozen Phase-4 integrated book (plan §19.4) — the baseline plus the two
+teammate components that earned a slot under a criterion fixed *before* any of them was measured:
+improve MaxDD or CVaR₉₉ in at least 4 of the 6 pre-2026 stress windows, cost under 0.05 whole-sample
+net Sharpe, and survive leave-one-out. Two of four components qualified.
+
+```python
+run("COMBINED")          # gross 0.6331 · net 0.4891 · MaxDD -19.07% · CVaR99 0.0200
+```
+
+Two things about it are worth knowing before you use it:
+
+- **It is a callable, not a constant.** `PRESETS["COMBINED"]` resolves through
+  `config.combined_preset()`, which builds data-derived objects and therefore does file IO. Making
+  it a constant would mean `import strategy` reads files on every teammate's machine whether or not
+  they use the preset.
+- **It is the one place the base reaches into `cesare/`.** `combined_preset` imports
+  `cesare.combined_engine.combined_components` lazily, at the moment the preset is requested. Its
+  inputs are teammates' *committed outputs*, re-priced rather than rebuilt (plan §15 fallback), so
+  the assembly logic belongs in `cesare/`, not here. The dependency is one-directional everywhere
+  else: `cesare` imports `strategy`, never the reverse. Read the `combined_preset` docstring in
+  [`config.py`](config.py) before changing anything on that seam — moving or renaming
+  `cesare/combined_engine.py` breaks `run("COMBINED")` and `tests/test_combined.py`.
+
+Every component folded in is labelled **re-priced, not rebuilt**, with its reconstruction method
+recorded per row in `cesare/outputs/p4_component_standalone.csv`.
+
+---
+
 ## Rules for AI agents working in this repo
 
 If you are an agent helping a teammate with an extension, follow these. They exist because the
@@ -292,9 +328,9 @@ comparison across teammates is the deliverable.
    reach the base through `StrategyConfig` fields and the two hooks. Genuine gaps in the base go to
    Cesare as a request.
 3. **Run `python strategy/tests/test_reconciliation.py` before and after your work.** Expect
-   `12/12 passed`, plus `11/11` from `tests/test_episodes.py` and `17/17` from
-   `tests/test_overlays.py`. If any fails, stop and report — do not build on a base that is not
-   reconciling.
+   `12/12 passed`, plus `11/11` from `tests/test_episodes.py`, `17/17` from
+   `tests/test_overlays.py` and `8/8` from `tests/test_combined.py` — 48 in total. If any fails,
+   stop and report — do not build on a base that is not reconciling.
 4. **Always report gross AND net**, on the same window, next to the baseline. A result quoted
    without its cost drag is not a result. Use `summary()`, which does both by default.
 5. **State the config.** Any table, CSV or chart must record what produced it —
@@ -400,6 +436,10 @@ is the closest expressible book, on the 2007+ sample.
 | `run()` — ALL, 27 names | 0.6284 | **0.4659** | `cesare/outputs/strategy_summary_stats.csv` |
 | `run("G10")` — 9 names | 0.1669 | 0.1191 | same |
 | `run("EM")` — 18 names | 0.606 | 0.376 | this build (no committed reference — the plan reports ALL and G10 only) |
+| `run("COMBINED")` — the Phase-4 book | 0.6331 | **0.4891** | `cesare/outputs/p4_combined_ladder.csv`, final row |
+
+Also fixed: turnover **0.675470** and cost drag **0.018146611** on `run()`; MaxDD **−19.07%** and
+CVaR₉₉ **0.0200** on `run("COMBINED")`.
 
 If your build does not produce these, fix that before anything else.
 

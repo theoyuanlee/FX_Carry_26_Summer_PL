@@ -1,6 +1,6 @@
 """Build the BofA progress deck for 2026-08-05 as one self-contained HTML file.
 
-    python cesare/build_deck.py        # -> cesare/deck_2026_08_05.html
+    python cesare/build_deck.py        # -> cesare/presentations/deck_2026_08_05.html
 
 **Why this is a module and not a hand-written HTML file.** The repo's standing
 promise (plan §1, `report/README.md` rule 1) is that every number traces to a
@@ -18,7 +18,7 @@ since the 2026-07-29 meeting. Nothing in it is framed as a final answer or a
 recommendation, because nothing in it is one yet.
 
 **Charts are matplotlib rendered to SVG and inlined**, not base64 PNGs. Two
-reasons: `strategy/overview.html`, the newest precedent in the repo, is inline
+reasons: `cesare/presentations/overview.html`, the newest precedent in the repo, is inline
 SVG and is 57 KB where the older PNG deck is 640 KB; and vector text stays legible
 when a slide is projected. The one real hazard is that several matplotlib SVGs on
 one page collide on their element ids (`figure_1`, `axes_1`, and the generated
@@ -51,13 +51,13 @@ if str(REPO_ROOT) not in sys.path:
 from strategy import run  # noqa: E402
 
 OUTPUTS = Path(__file__).resolve().parent / "outputs"
-DECK = Path(__file__).resolve().parent / "deck_2026_08_05.html"
+DECK = Path(__file__).resolve().parent / "presentations" / "deck_2026_08_05.html"
 
 #: Snapshot date, stamped into the page. Passed in rather than read from the
 #: clock so a rebuild of this deck is reproducible.
 AS_OF = "2026-08-05"
 
-# --- palette, lifted from strategy/overview.html so the house style carries ---
+# --- palette, lifted from presentations/overview.html so the house style carries ---
 BLUE, AQUA, ORANGE, RED = "#2a78d6", "#1baf7a", "#eb6834", "#e34948"
 YELLOW, INK, INK2, MUTED = "#eda100", "#0b0b0b", "#52514e", "#898781"
 GRID, CARD = "#e1e0d9", "#ffffff"
