@@ -11,7 +11,8 @@ Order of operations (fixed, and the reason results are comparable):
     3. sort          carry_portfolio(...)          -> unit weights (gross 2)
     4. size          vol_target_weights(...)       -> vol-targeted weights
     5. overlays      exposure scalar, then weight_overlay, then extra_lag
-    6. P&L           portfolio_returns; roundtrip_cost; net = gross - cost
+    6. P&L           portfolio_returns; roundtrip_cost; external_legs;
+                     net = gross - cost
 
 Step 5 sits BEFORE step 6 deliberately: overlays move *weights*, so the cost
 model prices the trades an overlay triggers and the reported turnover includes
@@ -24,7 +25,7 @@ With no overlays and default settings the pipeline is identical to
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Sequence
 
@@ -163,6 +164,14 @@ class StrategyResult:
     cost: pd.Series
     net: pd.Series
     window: tuple[pd.Timestamp, pd.Timestamp]
+    #: Daily P&L of each `config.external_legs` entry, one column per leg, NaN
+    #: wherever `gross` is NaN so the `contrib` identity survives. Empty when
+    #: there are no legs, which is the baseline.
+    external: pd.DataFrame = field(default_factory=pd.DataFrame)
+    #: Per-leg count of days the leg held a position but had no quote and so
+    #: earned nothing. Non-zero is not necessarily wrong (a US bond ETF has no
+    #: quote on a US holiday the FX book still trades) but it must be visible.
+    external_coverage: dict = field(default_factory=dict)
 
     # --- derived views ------------------------------------------------------
 
@@ -181,9 +190,19 @@ class StrategyResult:
 
     @property
     def contrib(self) -> pd.DataFrame:
-        """Per-currency P&L contribution; rows sum to `gross` exactly."""
+        """Per-instrument P&L contribution; rows sum to `gross` exactly.
+
+        One column per traded currency, plus one per `external_legs` entry. The
+        legs are included rather than reported separately so that
+        `contrib.sum(axis=1) == gross` stays true *with* a hedge attached — an
+        attribution table that silently stops adding up once someone bolts on a
+        bond leg is worse than no guarantee at all.
+        """
         cols = self.weights.columns.intersection(self.panels.xret.columns)
-        return self._win(self.weights[cols] * self.panels.xret[cols])
+        out = self._win(self.weights[cols] * self.panels.xret[cols])
+        if not self.external.empty:
+            out = out.join(self._win(self.external), how="left")
+        return out
 
     @property
     def turnover_daily(self) -> pd.Series:
@@ -206,17 +225,28 @@ class StrategyResult:
 
     # --- reporting ----------------------------------------------------------
 
-    def summary(self, benchmark: pd.Series | str | None = "auto") -> pd.DataFrame:
+    def summary(self, benchmark: pd.Series | str | None = "auto",
+                min_obs: int = 120) -> pd.DataFrame:
         """Gross and net performance stats (`fx_utils.summary_stats`).
 
         `benchmark="auto"` picks the investable index the project benchmarks
         against: DBHVG10U for a G10 book, FXCTEM8 otherwise (plan §6.4). Pass a
         Series to use your own, or None to skip the information ratio.
+
+        `min_obs` is the minimum number of observations a column needs before
+        any statistic is computed; below it `summary_stats` drops the column, so
+        the default 120 makes a short window return an EMPTY frame rather than
+        an error. That is why this passthrough exists: an episode study on the
+        COVID crash (64 trading days), the 2013 taper tantrum (109) or either
+        2026 shock (85 / 65) is unreportable without it. Lower it to stat a
+        short window — but per plan guardrail §6.8, quote cumulative return,
+        MaxDD, worst day and n_days there, never an annualised Sharpe off 64
+        days. `episodes.report_windows` enforces that for you.
         """
         bench = self._resolve_benchmark(benchmark)
         label = self.config.label()
         frame = pd.DataFrame({f"{label}_gross": self.gross, f"{label}_net": self.net})
-        return fx.summary_stats(frame, benchmark=bench)
+        return fx.summary_stats(frame, benchmark=bench, min_obs=min_obs)
 
     def _resolve_benchmark(self, benchmark) -> pd.Series | None:
         if benchmark is None:
@@ -255,7 +285,8 @@ class StrategyResult:
         """
         return self._win(fx.roundtrip_cost(weights,
                                            self.panels.hs_outright * multiple,
-                                           self.panels.hs_points * multiple))
+                                           self.panels.hs_points * multiple,
+                                           tenor=self.panels.tenor))
 
     def reslice(self, start=None, end=None) -> "StrategyResult":
         """Same book, different evaluation window (e.g. the 2008 crisis only).
@@ -271,14 +302,22 @@ class StrategyResult:
             universe=self.universe, signal=self.signal,
             weights_unit=self.weights_unit, weights=self.weights,
             gross=self.gross.loc[lo:hi], cost=self.cost.loc[lo:hi],
-            net=self.net.loc[lo:hi], window=(lo, hi))
+            net=self.net.loc[lo:hi], window=(lo, hi),
+            external=self.external.loc[lo:hi] if not self.external.empty
+            else self.external,
+            external_coverage=self.external_coverage)
 
     def __repr__(self) -> str:
+        head = (f"<StrategyResult {self.config.label()!r} | {len(self.universe)} ccy | "
+                f"{self.window[0].date()}->{self.window[1].date()}")
         s = self.summary(benchmark=None)
+        if len(s) < 2:
+            # Too few observations for annualised stats (summary_stats min_obs).
+            # Echoing a resliced crisis window in a notebook must not raise, so
+            # report the window and defer the ratio to episodes.report_windows.
+            return f"{head} | {len(self.net.dropna())} days, too short for annualised stats>"
         g, n = s.iloc[0]["sharpe"], s.iloc[1]["sharpe"]
-        return (f"<StrategyResult {self.config.label()!r} | {len(self.universe)} ccy | "
-                f"{self.window[0].date()}->{self.window[1].date()} | "
-                f"Sharpe gross {g:.3f} net {n:.3f}>")
+        return f"{head} | Sharpe gross {g:.3f} net {n:.3f}>"
 
 
 # ---------------------------------------------------------------------------
@@ -334,12 +373,21 @@ def run(config: StrategyConfig | str | None = None, **overrides) -> StrategyResu
     `config` may be a `StrategyConfig`, a preset name ("ALL"/"G10"/"EM") or None
     for the default; keyword `overrides` are applied on top.
     """
+    cfg: StrategyConfig
     if config is None:
-        config = PRESETS["ALL"]
+        cfg = PRESETS["ALL"]
     elif isinstance(config, str):
-        config = PRESETS[config.upper()]
-    if overrides:
-        config = config.with_(**overrides)
+        key = config.upper()
+        if key not in PRESETS:
+            raise ValueError(f"unknown preset {config!r}; have {sorted(PRESETS)}")
+        preset = PRESETS[key]
+        # A preset may be a callable that BUILDS its config — "COMBINED" has to
+        # load teammate inputs, and doing that at import time would make
+        # `import strategy` touch the filesystem for everyone who never uses it.
+        cfg = preset() if callable(preset) else preset
+    else:
+        cfg = config
+    config = cfg.with_(**overrides) if overrides else cfg
 
     panels = load_panels(config.tenor)
     universe = resolve_universe(config.universe, panels, config.exclude)
@@ -387,9 +435,30 @@ def run(config: StrategyConfig | str | None = None, **overrides) -> StrategyResu
     if config.costs:
         cost = fx.roundtrip_cost(weights,
                                  panels.hs_outright * config.cost_multiple,
-                                 panels.hs_points * config.cost_multiple)
+                                 panels.hs_points * config.cost_multiple,
+                                 tenor=config.tenor)
     else:
         cost = pd.Series(0.0, index=gross.index, name="tcost")
+
+    # 6b. external instrument legs (bond hedges, futures overlays). Each earns
+    # Σ w·r and pays Σ|Δw|·cost_bps/1e4, so an added asset is costed like every
+    # other position rather than netted off a return series for free. Masked to
+    # `gross`'s own NaN pattern, so pre-inception days stay NaN and the
+    # `contrib.sum(axis=1) == gross` identity survives. `()` is an exact no-op:
+    # nothing below runs.
+    index, live = gross.index, gross.notna()
+    external = pd.DataFrame(index=index)
+    external_coverage: dict[str, int] = {}
+    for leg in config.external_legs:
+        external[leg.name] = leg.pnl(index, config.rebal).where(live)
+        gross = gross.add(external[leg.name], fill_value=0.0).where(live)
+        if config.costs:
+            leg_cost = leg.cost(index, config.rebal) * config.cost_multiple
+            cost = cost.add(leg_cost.where(live, 0.0), fill_value=0.0)
+        external_coverage[leg.name] = leg.missing_days(index, config.rebal, live)
+    gross = gross.rename("gross")
+    cost = cost.rename("tcost")
+
     net = (gross - cost).rename("net")
 
     live = gross.dropna().index
@@ -403,4 +472,5 @@ def run(config: StrategyConfig | str | None = None, **overrides) -> StrategyResu
         config=config, panels=panels, universe=universe, signal=signal,
         weights_unit=weights_unit, weights=weights,
         gross=gross.loc[lo:hi], cost=cost.loc[lo:hi], net=net.loc[lo:hi],
-        window=(lo, hi))
+        window=(lo, hi), external=external.loc[lo:hi] if len(external.columns)
+        else external, external_coverage=external_coverage)

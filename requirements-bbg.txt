@@ -1,0 +1,21 @@
+# requirements-bbg.txt — OPTIONAL, only for refreshing data from Bloomberg
+#
+# Deferred from the cesare/ hygiene pass (plan §14.4) and created here as part of
+# the repo-wide collation (§14.5).
+#
+# YOU ALMOST CERTAINLY DO NOT NEED THIS. The 13 parquet groups in `data/raw/` are
+# git-tracked, so every number in the report and the decks is reproducible with
+# `requirements.txt` alone and no terminal. This file exists only for `src/`:
+#
+#     src/bloomberg_data.py      the automated pull (xbbg -> blpapi -> terminal)
+#
+# `src/convert_extra_xlsx.py` needs only openpyxl, which is in the root
+# requirements — the hand-pulled supplement is converted without a terminal.
+#
+# Install alongside, not instead of, the root file:
+#     pip install -r requirements.txt -r requirements-bbg.txt
+
+xbbg>=0.7           # pandas-friendly wrapper over blpapi
+blpapi>=3.24        # Bloomberg's own SDK. NOT on PyPI by default — install with:
+                    #   pip install --index-url=https://blpapi.bloomberg.com/repository/releases/python/simple blpapi
+                    # Requires a running Bloomberg Terminal on the same machine.
