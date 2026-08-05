@@ -1,0 +1,5 @@
+outs:
+- md5: aaf33bb1634c19783c319a6f973424fb
+  size: 211509
+  hash: md5
+  path: fx_dollar_index_daily.parquet

@@ -857,18 +857,73 @@ def forward_halfspreads(tenor: str = "1M", winsor_q: float = 0.99,
     return _clean(hs_out), _clean(hs_pts)
 
 
+def roll_schedule(weights: pd.DataFrame, changed: pd.Series,
+                  tenor: str = "1M") -> pd.Series:
+    """Boolean daily mask: the days maintained notional pays the points spread.
+
+    A position in a `tenor`-month forward is rolled when that forward matures —
+    every `TENOR_MONTHS[tenor]` months — no matter how often the book
+    rebalances. Billing the roll on the *rebalance* grid instead (the behaviour
+    before this fix) is only correct where the two coincide, i.e. at the
+    committed baseline of a 1M forward rebalanced month-end. Off that cell it is
+    wrong in both directions: at 12M × ME it charges twelve rolls a year of the
+    much wider 12M points spread, which is why the drag there RISES to 4.84%/yr
+    while turnover FALLS to 0.426 (plan Appendix C #14), and at 1M × QE it
+    charges four rolls a year of a forward that matures twelve times.
+
+    A roll due in month m is charged on that month's rebalance day when there is
+    one — so the maintained notional is `min(|w_old|, |w_new|)`, exactly as
+    before — and otherwise on the month's first trading day, where the weights
+    have not moved and the whole held book rolls. The first branch is what makes
+    this an exact no-op at the baseline: that book has one rebalance day in every
+    one of its 230 live months, so at n = 1 every rebalance day is a roll day and
+    the mask is unchanged elementwise. The second branch is what stops a book
+    that rebalances more slowly than its forward matures from being undercharged.
+
+    Months in which the book holds nothing are skipped and do not start the
+    clock, so a roll is never billed against a position that does not exist.
+    """
+    if tenor not in TENOR_MONTHS:
+        raise ValueError(f"tenor must be one of {sorted(TENOR_MONTHS)}, got {tenor!r}")
+    n = TENOR_MONTHS[tenor]
+    idx = weights.index
+    roll = pd.Series(False, index=idx)
+    live = weights.abs().sum(axis=1) > 0
+    positions = pd.Series(np.arange(len(idx)), index=idx)
+    last_ord = None
+    for month, block in positions.groupby(idx.to_period("M"), sort=True):
+        loc = block.to_numpy()
+        if not live.iloc[loc].any():
+            continue
+        if last_ord is not None and (month.ordinal - last_ord) < n:
+            continue
+        rebalances = loc[changed.iloc[loc].to_numpy()]
+        roll.iloc[rebalances[0] if len(rebalances) else loc[0]] = True
+        last_ord = month.ordinal
+    return roll
+
+
 def roundtrip_cost(weights: pd.DataFrame, hs_outright: pd.DataFrame,
-                   hs_points: pd.DataFrame | None = None) -> pd.Series:
+                   hs_points: pd.DataFrame | None = None,
+                   tenor: str = "1M") -> pd.Series:
     """Daily transaction-cost series (return units, >= 0) for a weight panel.
 
-    Charged on the days weights actually change (the rebalance effective day,
-    since monthly weights are forward-filled between rebalances):
-    - turnover leg: Σ |Δw| · hs_outright — changed notional crosses the full
-      outright-forward spread;
+    - turnover leg: Σ |Δw| · hs_outright, charged on the days weights actually
+      change (the rebalance effective day, since weights are forward-filled
+      between rebalances) — changed notional crosses the full outright-forward
+      spread;
     - roll leg (if hs_points given): Σ min(|w_old|, |w_new|) · hs_points —
-      maintained notional rolls its 1M forward via an FX swap and pays only
-      the points spread. Charging the outright on the full book instead would
-      roughly double costs (gross-2 book, 12 rolls/yr).
+      maintained notional rolls its forward via an FX swap and pays only the
+      points spread. Charging the outright on the full book instead would
+      roughly double costs (gross-2 book, 12 rolls/yr at 1M).
+
+    The roll leg is billed on the **forward-tenor** grid via `roll_schedule`,
+    not on the rebalance grid — see that function for why, and note that
+    `tenor` must match the tenor `hs_points` was built at (`forward_halfspreads`
+    prices the `{root}{tenor}` points spread). `run` passes `config.tenor`
+    for you. The default "1M" reproduces the pre-fix behaviour at the committed
+    baseline exactly.
+
     Spreads are forward-filled and gap-filled with the per-currency median so
     a missing quote never silently zeroes a real cost.
     """
@@ -887,8 +942,8 @@ def roundtrip_cost(weights: pd.DataFrame, hs_outright: pd.DataFrame,
     cost = (dw.abs() * _prep(hs_outright)).sum(axis=1, min_count=1)
     if hs_points is not None:
         held = np.minimum(w[common].abs(), w[common].shift(1).abs().fillna(0.0))
-        rebal_day = dw.abs().sum(axis=1) > 0
-        roll = (held * _prep(hs_points)).sum(axis=1, min_count=1).where(rebal_day, 0.0)
+        roll_day = roll_schedule(w[common], dw.abs().sum(axis=1) > 0, tenor)
+        roll = (held * _prep(hs_points)).sum(axis=1, min_count=1).where(roll_day, 0.0)
         cost = cost.add(roll, fill_value=0.0)
     return cost.rename("tcost")
 
@@ -934,11 +989,20 @@ def implied_skew_panel(tenor: str = "1M", delta: int = 25,
     `standardize` (default) the RR is divided by the ATM vol
     (`vol_surface_panel("ATM")`) to give the dimensionless "smile skew" RR/ATM
     (Malz 1997), comparable across currencies on very different vol levels; the
-    ATM-scaled slope preserves the cross-sectional ranking the sort relies on. A
-    full Bakshi-Kapadia-Madan model-free skewness would need the whole strike
-    chain, which the 3-point (ATM/RR/BF) surface here does not provide. Purely
-    contemporaneous per date, so it introduces no lookahead — consumed like
-    `carry_panel`, sampled month-end and shifted one day downstream.
+    ATM-scaled slope preserves the cross-sectional ranking the sort relies on.
+    This is a *proxy* for risk-neutral skewness, not a measurement of it: a full
+    Bakshi-Kapadia-Madan model-free skewness needs a strike chain, and this
+    surface is 5-point (ATM plus 10d and 25d RR/BF) rather than continuous — but
+    5 points are enough to interpolate a smile and integrate it, which
+    `cesare/bkm_skew.py` does. (An earlier version of this docstring asserted the
+    surface was 3-point and that model-free skewness was therefore out of reach.
+    That was false, and it is why D1 originally ran on the proxy; plan Appendix C
+    #28.) The proxy and the model-free measure agree strongly cross-sectionally
+    (rank correlation 0.89) and almost not at all on month-to-month changes
+    (median 0.02), so prefer this for a cross-sectional sort and `bkm_skew` for
+    anything that keys off *changes* in crash pricing. Purely contemporaneous per
+    date, so it introduces no lookahead — consumed like `carry_panel`, sampled
+    month-end and shifted one day downstream.
     """
     rr = vol_surface_panel("RR", tenor=tenor, delta=delta)
     if not standardize:

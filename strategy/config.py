@@ -18,6 +18,8 @@ from typing import Callable, Sequence
 
 import pandas as pd
 
+from .overlays import ExternalLeg
+
 # Universe rules locked in plan §5.1: HKD/DKK are pegged (degenerate vol) and
 # CNY has no deliverable forwards (CNH is the tradable RMB leg).
 DEFAULT_EXCLUDE: tuple[str, ...] = ("HKD", "DKK", "CNY")
@@ -81,6 +83,15 @@ class StrategyConfig:
     weight_overlay : callable `f(weights, ctx) -> weights` applied last. Use for
         per-currency overlays (an option hedge on the long leg, a manual
         position edit). `ctx` is the `OverlayContext` with the panels.
+    external_legs : tuple of `overlays.ExternalLeg` — non-FX instruments held
+        alongside the book (a bond hedge, a futures overlay). Each adds `Σ w·r`
+        to `gross` and `Σ|Δw|·cost_bps/1e4` to `cost` in `core.run` step 6, so
+        an external instrument earns its return AND pays its own transaction
+        costs. This exists because the two hooks above genuinely cannot express
+        an additional asset: `portfolio_returns` intersects columns and would
+        drop it, and `roundtrip_cost` raises on a name with no half-spread
+        series. Default `()` is an exact no-op. Stack several with
+        `overlays.compose_exposure` / `compose_overlays` for the other two hooks.
     extra_lag : additional days of weight lag ON TOP of the base's own one-day
         lag. 0 for research; 1, 2, 3 for implementation-lag stress tests.
 
@@ -120,6 +131,7 @@ class StrategyConfig:
     # --- overlays -----------------------------------------------------------
     exposure: pd.Series | None = None
     weight_overlay: Callable | None = None
+    external_legs: tuple[ExternalLeg, ...] = ()
     extra_lag: int = 0
 
     # --- costs and window ---------------------------------------------------
@@ -143,6 +155,18 @@ class StrategyConfig:
             raise ValueError(f"extra_lag must be >= 0, got {self.extra_lag}")
         if self.vol_target is not None and self.vol_target <= 0:
             raise ValueError(f"vol_target must be > 0 or None, got {self.vol_target}")
+        if not isinstance(self.external_legs, tuple):
+            raise TypeError(
+                f"external_legs must be a tuple (it is part of a frozen config), "
+                f"got {type(self.external_legs).__name__}")
+        bad = [l for l in self.external_legs if not isinstance(l, ExternalLeg)]
+        if bad:
+            raise TypeError(f"external_legs entries must be ExternalLeg, got {bad}")
+        names = [l.name for l in self.external_legs]
+        if len(set(names)) != len(names):
+            # They become columns of `contrib`, where a duplicate would silently
+            # double-count one leg's P&L and break contrib.sum(1) == gross.
+            raise ValueError(f"external_legs names must be unique, got {names}")
 
     def with_(self, **overrides) -> "StrategyConfig":
         """Copy with fields replaced — the idiomatic way to vary one knob.
@@ -182,6 +206,7 @@ class StrategyConfig:
             "exposure": self.exposure is not None,
             "weight_overlay": getattr(self.weight_overlay, "__name__", None)
             if self.weight_overlay is not None else None,
+            "external_legs": "|".join(l.name for l in self.external_legs) or None,
         }
 
 
@@ -202,4 +227,32 @@ G10_BASELINE = StrategyConfig(universe="G10", name="G10")
 #: EM-only tercile book, for the EM-vs-G10 attribution.
 EM_BASELINE = StrategyConfig(universe="EM", name="EM")
 
-PRESETS = {"ALL": ALL_BASELINE, "G10": G10_BASELINE, "EM": EM_BASELINE}
+
+def combined_preset() -> StrategyConfig:
+    """The frozen Phase-4 combined engine (plan §19.4). `run("COMBINED")`.
+
+    The baseline plus the components that earned a slot under the criterion fixed
+    in advance in `cesare/combined_engine.py`: improve MaxDD or CVaR99 in at
+    least 4 of the 6 pre-2026 stress windows, cost under 0.05 whole-sample net
+    Sharpe, and survive leave-one-out. Two of four components qualified.
+
+    **A callable, not a constant, for two reasons.** It has to build data-derived
+    objects (a hedge-ratio series, an option panel), so evaluating it at import
+    time would make `import strategy` do file IO — and it would run on every
+    teammate's machine whether or not they use the preset. And its inputs are
+    teammates' *committed outputs*, re-priced here rather than rebuilt (§15
+    fallback), so the assembly logic belongs in `cesare/`, not in the shared
+    base. The import below is therefore deliberately lazy and deliberately
+    one-directional: `cesare` imports `strategy`, never the reverse, except at
+    the moment this preset is actually requested.
+
+    Raises `FileNotFoundError` naming the missing file if a teammate's committed
+    input is absent, rather than silently returning a thinner book.
+    """
+    from cesare.combined_engine import combined_components
+    return ALL_BASELINE.with_(name="COMBINED", **combined_components())
+
+
+#: `run("COMBINED")` resolves through the callable; the other three are constants.
+PRESETS = {"ALL": ALL_BASELINE, "G10": G10_BASELINE, "EM": EM_BASELINE,
+           "COMBINED": combined_preset}

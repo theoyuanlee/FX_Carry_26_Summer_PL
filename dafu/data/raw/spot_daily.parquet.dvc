@@ -1,0 +1,5 @@
+outs:
+- md5: 44d6a8e0cb5563b75fd7e6367a29ab7d
+  size: 6135521
+  hash: md5
+  path: spot_daily.parquet

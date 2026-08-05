@@ -1,0 +1,8 @@
+# Raw data is DVC-tracked, never committed. The .dvc pointer files beside the data
+# are what git carries; the parquet itself comes from the remote in .dvc/config.
+# From this folder: dvc pull
+data/**/*.parquet
+data/**/*.xlsx
+data/**/*.csv
+__pycache__/
+.ipynb_checkpoints/

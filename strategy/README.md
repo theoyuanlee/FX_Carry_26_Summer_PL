@@ -27,11 +27,20 @@ those numbers on every run, so drift gets caught immediately.
 
 | File | What it is |
 |---|---|
-| [`config.py`](config.py) | `StrategyConfig` — every knob, with the baseline as defaults. Presets `ALL_BASELINE` / `G10_BASELINE` / `EM_BASELINE`. |
+| [`config.py`](config.py) | `StrategyConfig` — every knob, with the baseline as defaults. Presets `ALL_BASELINE` / `G10_BASELINE` / `EM_BASELINE`, plus `COMBINED` (see [The `COMBINED` preset](#the-combined-preset)). |
 | [`core.py`](core.py) | `run(config) -> StrategyResult`. Orchestration only — no financial maths of its own. |
 | [`fx_utils.py`](fx_utils.py) | The engine: ~45 pure functions (data → panels → sorts → costs → stats → regressions). This is where the maths lives. |
+| [`episodes.py`](episodes.py) | The frozen evaluation windows (`ERAS`, `STRESS`) and the per-window reports built on them. See rule 11. |
+| [`overlays.py`](overlays.py) | Stacking several extensions in one book: `compose_exposure`, `compose_overlays`, and `ExternalLeg` for non-FX instruments. |
 | [`examples/`](examples/) | Five runnable scripts, one per extension pattern. Start with `01_baseline.py`. |
 | [`tests/test_reconciliation.py`](tests/test_reconciliation.py) | 12 acceptance tests: reconciliation to committed outputs, internal identities, and no-op guards on the hooks. |
+| [`tests/test_episodes.py`](tests/test_episodes.py) | 11 tests on the frozen windows, the per-leg decomposition, and the two v1.1.0 base fixes. |
+| [`tests/test_overlays.py`](tests/test_overlays.py) | 17 tests on composition, the gross-non-increasing contract, and `ExternalLeg` P&L / costs / lag. |
+| [`tests/test_combined.py`](tests/test_combined.py) | 8 tests freezing the `COMBINED` preset: it reproduces the ladder's final row, runs the baseline's window, and stays a superset of the base. |
+
+That is the whole package: five modules, five examples, four test suites. There is nothing else in
+here — the visual overview of this base now lives with the project's other decks at
+[`../cesare/presentations/overview.html`](../cesare/presentations/overview.html).
 
 ## Setup
 
@@ -47,6 +56,9 @@ Verify your environment in one command:
 
 ```bash
 python strategy/tests/test_reconciliation.py     # expect "12/12 passed"
+python strategy/tests/test_episodes.py           # expect "11/11 passed"
+python strategy/tests/test_overlays.py           # expect "17/17 passed"
+python strategy/tests/test_combined.py           # expect "8/8 passed"
 ```
 
 ---
@@ -115,7 +127,10 @@ Defaults reproduce the committed baseline. Change one thing; leave the rest alon
 |---|---|---|
 | `exposure` | `None` | `pd.Series` of multipliers (1.0 = fully invested). Scales total risk. Sampled on the rebalance grid, **lagged one period by the base**. Dates before the series starts are fully invested. |
 | `weight_overlay` | `None` | `f(weights, ctx) -> weights`. Per-currency changes: hedges, filters, manual edits. |
+| `external_legs` | `()` | Tuple of `ExternalLeg` — non-FX instruments held alongside the book (a bond hedge, a futures overlay). Each earns `Σ w·r` and pays `Σ\|Δw\|·cost_bps/1e4`. |
 | `extra_lag` | `0` | Extra days of execution lag on top of the base's own one-day lag. |
+
+Stacking more than one of anything: see [Composing extensions](#composing-extensions) below.
 
 ### Costs and window
 
@@ -154,7 +169,7 @@ res = run(cfg)
 
 | Method | What it does |
 |---|---|
-| `summary(benchmark="auto")` | Gross + net stats table (Sharpe, Sortino, Calmar, MaxDD, VaR/CVaR, skew, hit rate, IR). |
+| `summary(benchmark="auto", min_obs=120)` | Gross + net stats table (Sharpe, Sortino, Calmar, MaxDD, VaR/CVaR, skew, hit rate, IR). Columns with fewer than `min_obs` observations are dropped, so a window under 120 trading days returns an **empty** frame unless you lower it — `episodes.report_windows` does. |
 | `monthly(which="net")` | Month-end compounded returns, for monthly overlays. |
 | `reslice(start, end)` | Same book, narrower window — no rebuild, no re-estimation. |
 | `returns_from_weights(w)` | Re-price an arbitrary weight panel (e.g. `weights.shift(2)`). |
@@ -222,6 +237,84 @@ before the start date, which is what a subperiod study should do.
 
 ---
 
+## Composing extensions
+
+`StrategyConfig` carries **one** `exposure` and **one** `weight_overlay`. When several of us stack
+components in the same book ([`overlays.py`](overlays.py)):
+
+```python
+from strategy import run, compose_exposure, compose_overlays, ExternalLeg
+
+res = run(
+    exposure=compose_exposure(vix_gate, regime_gate),          # gates multiply
+    weight_overlay=compose_overlays(skew_filter, option_trim), # overlays chain
+)
+```
+
+Three things about this are contract, not convenience:
+
+1. **Gates multiply, so order cannot matter.** Two gates each halving risk give 0.25, not 0.5 —
+   they are independent risk vetoes, and a book that ignored the second one would be claiming
+   diversification between two signals that fire together. A gate's missing dates count as 1.0
+   (fully invested), so a model that only starts in 2015 leaves 2007–2014 untouched rather than
+   being handed a free "avoided 2008".
+2. **Overlays may scale positions down, never re-normalise back up.** This is asserted at runtime
+   and raises if violated. The failure mode is silent and serious: an overlay that re-normalises to
+   a target gross undoes whatever gate ran before it, then inherits credit for that gate's drawdown
+   improvement. Every step also receives the *same* `ctx`, so an overlay keys off the base book
+   rather than off what the previous overlay did.
+3. **`ExternalLeg` is for a new instrument, not a reweighting.** A bond hedge cannot go through
+   `weight_overlay`: `portfolio_returns` intersects columns and would silently drop it, and
+   `roundtrip_cost` raises on a name with no half-spread series. Pass it as an external leg and it
+   earns its return *and pays its own transaction costs*:
+
+```python
+leg = ExternalLeg(returns=tlt_daily_return,   # one unit of the instrument
+                  weight=-hedge_ratio,         # signed units, unlagged — the base lags it
+                  cost_bps=1.5, name="TLT")
+res = run(external_legs=(leg,))
+print(res.external_coverage)     # days the leg held but had no quote
+```
+
+The leg appears as a column of `contrib`, so `contrib.sum(axis=1) == gross` still holds.
+All three are exact no-ops at their neutral settings (`compose_exposure()`, `compose_overlays()`,
+`external_legs=()`), so adding the machinery cannot move your numbers.
+
+**Honest limit `ExternalLeg` does not remove:** it prices a *linear* instrument. A premium-paying
+option hedge needs an option price, and `data/raw` carries option **mids only**.
+
+---
+
+## The `COMBINED` preset
+
+`run("COMBINED")` is the frozen Phase-4 integrated book (plan §19.4) — the baseline plus the two
+teammate components that earned a slot under a criterion fixed *before* any of them was measured:
+improve MaxDD or CVaR₉₉ in at least 4 of the 6 pre-2026 stress windows, cost under 0.05 whole-sample
+net Sharpe, and survive leave-one-out. Two of four components qualified.
+
+```python
+run("COMBINED")          # gross 0.6331 · net 0.4891 · MaxDD -19.07% · CVaR99 0.0200
+```
+
+Two things about it are worth knowing before you use it:
+
+- **It is a callable, not a constant.** `PRESETS["COMBINED"]` resolves through
+  `config.combined_preset()`, which builds data-derived objects and therefore does file IO. Making
+  it a constant would mean `import strategy` reads files on every teammate's machine whether or not
+  they use the preset.
+- **It is the one place the base reaches into `cesare/`.** `combined_preset` imports
+  `cesare.combined_engine.combined_components` lazily, at the moment the preset is requested. Its
+  inputs are teammates' *committed outputs*, re-priced rather than rebuilt (plan §15 fallback), so
+  the assembly logic belongs in `cesare/`, not here. The dependency is one-directional everywhere
+  else: `cesare` imports `strategy`, never the reverse. Read the `combined_preset` docstring in
+  [`config.py`](config.py) before changing anything on that seam — moving or renaming
+  `cesare/combined_engine.py` breaks `run("COMBINED")` and `tests/test_combined.py`.
+
+Every component folded in is labelled **re-priced, not rebuilt**, with its reconstruction method
+recorded per row in `cesare/outputs/p4_component_standalone.csv`.
+
+---
+
 ## Rules for AI agents working in this repo
 
 If you are an agent helping a teammate with an extension, follow these. They exist because the
@@ -235,7 +328,9 @@ comparison across teammates is the deliverable.
    reach the base through `StrategyConfig` fields and the two hooks. Genuine gaps in the base go to
    Cesare as a request.
 3. **Run `python strategy/tests/test_reconciliation.py` before and after your work.** Expect
-   `12/12 passed`. If it fails, stop and report — do not build on a base that is not reconciling.
+   `12/12 passed`, plus `11/11` from `tests/test_episodes.py`, `17/17` from
+   `tests/test_overlays.py` and `8/8` from `tests/test_combined.py` — 48 in total. If any fails,
+   stop and report — do not build on a base that is not reconciling.
 4. **Always report gross AND net**, on the same window, next to the baseline. A result quoted
    without its cost drag is not a result. Use `summary()`, which does both by default.
 5. **State the config.** Any table, CSV or chart must record what produced it —
@@ -251,6 +346,25 @@ comparison across teammates is the deliverable.
 9. **Write outputs to your own folder** (`<you>/outputs/`), never to `cesare/outputs/` or
    `strategy/`.
 10. **No git operations** unless explicitly asked — leave changes uncommitted.
+11. **Report per window, not just whole-sample.** Every result table carries a `window` column, and
+    you print `report_windows(res)` before quoting any whole-sample number. A rule that lifts the
+    full-sample Sharpe while making the crisis eras worse is a rule this book does not want, and
+    only the per-window table shows that. Below ~120 trading days quote cumulative return, MaxDD,
+    worst day and `n_days` — never an annualised Sharpe. `episodes.py` enforces both for you.
+
+```python
+from strategy import run
+from strategy.episodes import ERAS, STRESS, report_windows, compare_windows
+
+res = run(exposure=my_gate)
+print(report_windows(res, STRESS, which="both"))     # did it preserve capital?
+print(report_windows(res, ERAS))                     # where did the P&L come from?
+print(compare_windows({"base": run(), "mine": res}, STRESS, metric="max_drawdown"))
+```
+
+`ERAS` partitions the sample, so its shares of P&L sum to 100% — that is the answer to "you picked
+your windows". `STRESS` is the tail-event set and is allowed to overlap. **Both are frozen**: adding
+a window is fine, silently changing one is not, and `tests/test_episodes.py` asserts the exact dates.
 
 ---
 
@@ -322,6 +436,10 @@ is the closest expressible book, on the 2007+ sample.
 | `run()` — ALL, 27 names | 0.6284 | **0.4659** | `cesare/outputs/strategy_summary_stats.csv` |
 | `run("G10")` — 9 names | 0.1669 | 0.1191 | same |
 | `run("EM")` — 18 names | 0.606 | 0.376 | this build (no committed reference — the plan reports ALL and G10 only) |
+| `run("COMBINED")` — the Phase-4 book | 0.6331 | **0.4891** | `cesare/outputs/p4_combined_ladder.csv`, final row |
+
+Also fixed: turnover **0.675470** and cost drag **0.018146611** on `run()`; MaxDD **−19.07%** and
+CVaR₉₉ **0.0200** on `run("COMBINED")`.
 
 If your build does not produce these, fix that before anything else.
 

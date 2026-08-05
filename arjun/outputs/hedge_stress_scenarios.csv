@@ -1,0 +1,11 @@
+,sharpe,ann_ret,ann_vol,worst_day
+(a) baseline,0.1191,0.0138,0.1155,-0.0855
+(b) whole-book de-risk,0.2172,0.0198,0.0913,-0.0462
+(c) JPY-leg cut via JY1 future,0.0913,0.0102,0.112,-0.083
+"(c-x) JPY-leg cut, spot+fwd cross-check",0.0683,0.0076,0.1113,-0.0816
+(c') JPY-leg flip via JY1 future,0.0594,0.0067,0.1125,-0.0806
+(e) CHF-leg cut via SF1 future,0.1111,0.0125,0.1124,-0.0602
+"(e-x) CHF-leg cut, spot+fwd cross-check",0.0773,0.0087,0.1121,-0.059
+(f) both funding legs cut via futures,0.0803,0.009,0.1115,-0.0607
+(d) de-risk + short MXEF,0.2936,0.035,0.1191,-0.0639
+(d') de-risk + short DX1,-0.0069,-0.0008,0.1136,-0.0462

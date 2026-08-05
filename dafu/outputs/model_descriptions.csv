@@ -1,0 +1,6 @@
+,0
+MS-book,2-state Markov switching on the book's own monthly net return
+MS-equity,2-state Markov switching on world equity monthly returns
+MS-fxvol,2-state Markov switching on the monthly change in log FX implied vol
+Vol-rank,trailing 5-year percentile of FX implied volatility
+Logit,ridge logistic regression on 12 macro and risk features
