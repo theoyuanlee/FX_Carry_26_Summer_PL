@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hedging the FX Carry Book with Futures — one-pager</title>
+<style>
+  @page { size: letter; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 8.5in; height: 11in; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: #0b0b0b;
+    background: #fcfcfb;
+    padding: 0.36in 0.48in 0.28in;
+    display: flex; flex-direction: column;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    font-size: 10px; line-height: 1.46;
+  }
+  .muted { color: #898781; }
+  .sec   { color: #52514e; }
+
+  /* ---------- header ---------- */
+  header { display: flex; justify-content: space-between; align-items: baseline;
+           border-bottom: 2px solid #0b0b0b; padding-bottom: 8px; }
+  h1 { font-size: 19px; font-weight: 700; letter-spacing: -0.2px; }
+  .sub { font-size: 10px; color: #52514e; margin-top: 2px; }
+  .meta { text-align: right; font-size: 8.5px; color: #898781; line-height: 1.5; }
+
+  /* ---------- stat tiles ---------- */
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; margin: 10px 0 10px; }
+  .tile { border: 1px solid rgba(11,11,11,0.10); border-radius: 6px; padding: 7px 9px 6px; background: #fff; }
+  .tile .v { font-size: 19px; font-weight: 700; letter-spacing: -0.3px; }
+  .tile .l { font-size: 8.2px; color: #52514e; margin-top: 1px; }
+  .tile .v .unit { font-size: 10px; font-weight: 600; color: #52514e; }
+
+  /* ---------- two-column body ---------- */
+  .cols { display: grid; grid-template-columns: 1fr 1.02fr; gap: 16px; }
+  h2 { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.8px;
+       color: #52514e; margin-bottom: 5px; }
+  h2 .n { color: #2a78d6; }
+  p, li { font-size: 9.8px; }
+  .what p { margin-bottom: 6px; }
+  .what b { font-weight: 650; }
+  ul.findings { list-style: none; }
+  ul.findings li { padding-left: 12px; position: relative; margin-bottom: 5px; }
+  ul.findings li::before { content: ""; position: absolute; left: 0; top: 5px;
+    width: 5px; height: 5px; border-radius: 2px; background: #2a78d6; }
+
+  /* ---------- chart ---------- */
+  .chart { margin-top: 2px; }
+  .chart-note { font-size: 8px; color: #898781; margin-top: 4px; }
+  .plot { position: relative; margin-top: 14px; }
+  .row { display: grid; grid-template-columns: 112px 1fr 32px; align-items: center; height: 19px; }
+  .row .lab { font-size: 9px; color: #0b0b0b; padding-right: 7px; text-align: right;
+              white-space: nowrap; overflow: hidden; }
+  .row .val { font-size: 9px; font-variant-numeric: tabular-nums; color: #52514e; padding-left: 5px; }
+  .track { position: relative; height: 100%; }
+  .bar { position: absolute; left: 0; top: 4.5px; bottom: 4.5px; border-radius: 0 3px 3px 0;
+         background: #2a78d6; }
+  .bar.artifact {
+    background: repeating-linear-gradient(45deg, #9ec5f4 0 3px, #6da7ec 3px 6px);
+  }
+  .grp { font-size: 7.6px; text-transform: uppercase; letter-spacing: 0.7px; color: #898781;
+         margin: 5px 0 1px; display: grid; grid-template-columns: 112px 1fr; }
+  .grp span { grid-column: 2; padding-left: 2px; }
+  .refs { position: absolute; top: -14px; bottom: 0; left: 112px; right: 32px; pointer-events: none; }
+  .refline { position: absolute; top: 14px; bottom: 0; width: 0; }
+  .refline.dashed { border-left: 1.4px dashed #898781; }
+  .refline.solid  { border-left: 1.6px solid #0b0b0b; }
+  .reflab { position: absolute; top: -1px; font-size: 7.8px; white-space: nowrap; }
+  .reflab.before { transform: translateX(calc(-100% - 5px)); }
+  .reflab.after  { transform: translateX(5px); }
+  .baseline { position: absolute; left: 112px; right: 32px; bottom: 0; border-bottom: 1px solid #c3c2b7; }
+
+  /* ---------- verdict table ---------- */
+  .verdict { margin-top: 10px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { font-size: 9.1px; padding: 4.5px 7px; text-align: left; vertical-align: top; }
+  thead th { text-transform: uppercase; letter-spacing: 0.6px; font-size: 7.6px; color: #52514e;
+             border-bottom: 1.4px solid #0b0b0b; }
+  tbody tr { border-bottom: 1px solid #e1e0d9; }
+  tbody tr:last-child { border-bottom: none; }
+  td.c { text-align: center; font-weight: 700; white-space: nowrap; }
+  .no  { color: #d03b3b; }
+  .ok  { color: #006300; }
+  td b { font-weight: 650; }
+
+
+  /* ---------- A.3 ranking strip ---------- */
+  .rank { margin-top: 9px; border: 1px solid rgba(11,11,11,0.10); border-radius: 7px;
+          background: #fff; padding: 7px 12px 7px; }
+  .rank h2 { margin-bottom: 6px; }
+  .rank-row { display: flex; align-items: stretch; gap: 0; }
+  .rk { flex: 1; text-align: center; padding: 0 4px; }
+  .rk .rv { font-size: 15px; font-weight: 700; letter-spacing: -0.3px; }
+  .rk .rl { font-size: 8.2px; color: #52514e; margin-top: 1px; line-height: 1.3; }
+  .rk.win .rv { color: #006300; }
+  .gt { align-self: center; color: #898781; font-size: 12px; font-weight: 600; padding: 0 2px; }
+  /* ---------- bottom line ---------- */
+  .bottom { margin-top: auto; background: #0b0b0b; color: #fff; border-radius: 7px;
+            padding: 9px 14px 8px; }
+  .bottom .bl-t { font-size: 8px; text-transform: uppercase; letter-spacing: 1px; color: #c3c2b7;
+                  margin-bottom: 3px; }
+  .bottom p { font-size: 10.6px; line-height: 1.45; color: #fff; }
+  .bottom b { color: #86b6ef; }
+  footer { font-size: 7.6px; color: #898781; margin-top: 5px; display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Hedging the FX Carry Book with Futures</h1>
+    <div class="sub">Can funding-currency, Treasury, S&amp;P&nbsp;500, DXY, or VIX futures hedge the 27-currency carry book — statically or dynamically?</div>
+  </div>
+  <div class="meta">
+    <code>arjun/hedge_comparison.ipynb</code><br>
+    Arjun Patel · UChicago × BofA Project Lab<br>
+    Sample 2007-05 → 2026-06 · Bloomberg static pull
+  </div>
+</header>
+
+<div class="tiles">
+  <div class="tile"><div class="v">0.466</div><div class="l">Unhedged book — net Sharpe, 27-ccy G10+EM carry (committed &amp; reconciled)</div></div>
+  <div class="tile"><div class="v">0.571</div><div class="l">The bar to beat: <b>de-risk control</b> — book off during FX-vol stress</div></div>
+  <div class="tile"><div class="v">+34 <span class="unit">bp/day</span></div><div class="l">JPY overlay payoff on the book's worst-5% days — best tail hedge tested</div></div>
+  <div class="tile"><div class="v">−1.8 <span class="unit">%/yr</span></div><div class="l">…and its cost: carry paid every day to stay long JPY (earnable pricing)</div></div>
+</div>
+
+<div class="cols">
+  <div class="what">
+    <h2><span class="n">01</span> What the notebook does</h2>
+    <p><b>The book.</b> Rank 27 currencies by forward-implied carry; long high-yielders,
+    funded by shorting the low-yielders (JPY, CHF). Vol-targeted 10%, net of costs.
+    A reconciliation gate reproduces the committed Sharpes exactly before any test runs.</p>
+    <p><b>Part A — the JPY hedge, three ways.</b> The book is short JPY ~79% of days
+    <i>on purpose</i> (its best G10 earner), so a plain static long-JPY overlay is just
+    un-sizing a profitable leg — not a hedge. The notebook therefore tests the versions that
+    could work: <b>(A.1)</b> static hedge-ratio scaling of the JPY leg, <b>(A.2)</b> cutting or
+    flipping the funding legs only when a tradeable FX-vol trigger fires, and <b>(A.3)</b> a
+    variance-minimising JY1 overlay on the whole book — full hedge-ratio sweep, real-time
+    expanding &amp; rolling-beta <b>dynamic hedging</b>, and stress-gated hybrids.</p>
+    <p><b>Part B — five futures classes, one yardstick.</b> Every instrument (JY1, SF1, TU1,
+    FV1, TY1, US1, SPXT/ES1, DX1, UX1/SPVXSTR) vs the book, with each hedged Sharpe
+    <b>decomposed into variance reduction vs the instrument's own return</b> — so an
+    instrument's bull market or a data artifact can't masquerade as hedging skill.</p>
+    <p><b>Data honesty.</b> Real 2026-08 futures pulls (JY1, SF1, SPXT), gated to be static
+    values; every generic futures series is cross-checked against a spot+forward replica to
+    strip the <b>roll-splice artifact</b> (~200 bp/yr of phantom return in JY1/SF1; +46%/yr in VIX).</p>
+
+    <h2 style="margin-top:8px"><span class="n">02</span> Key findings</h2>
+    <ul class="findings">
+      <li><b>Nothing investable beats de-risking.</b> Judged against cutting exposure in stress
+      (Sharpe 0.571), every honest futures overlay fails — most also land below the unhedged 0.466.</li>
+      <li><b>JPY is real insurance at full price.</b> Best tail payoff (+32–34 bp/day) and ~10% vol
+      reduction, but the carry premium eats it; max drawdown gets <i>worse</i> (2013–15 JPY collapse).</li>
+      <li><b>Dynamic hedging doesn't rescue it</b> — the JPY beta never changes sign, so rolling
+      re-estimation adds noise, not timing: dynamic 0.25–0.37 vs static 0.31–0.43.</li>
+      <li><b>The funding legs aren't the crash risk.</b> Cutting JPY/CHF legs in stress <i>hurts</i>
+      (0.119 → 0.068–0.091 on the G10 book); the stress factor is broad risk appetite, spread
+      across all legs.</li>
+      <li><b>Artifact watch.</b> The two rows that nominally clear the bar are both measurement
+      artifacts: UX1 generic (phantom +46%/yr roll gain) and SF1 (0.576 → 0.469 on replica pricing).</li>
+    </ul>
+  </div>
+
+  <div class="chart">
+    <h2><span class="n">03</span> Static variance-minimising hedge, by instrument — net Sharpe</h2>
+    <div class="plot">
+      <div class="refs">
+        <div class="refline dashed" style="left: 71.7%"></div>
+        <div class="reflab before" style="left: 71.7%; color:#898781;">unhedged 0.466</div>
+        <div class="refline solid" style="left: 87.8%"></div>
+        <div class="reflab after" style="left: 87.8%; color:#0b0b0b; font-weight:600;">de-risk 0.571</div>
+      </div>
+
+      <div class="grp"><span>Funding-currency futures</span></div>
+      <div class="row"><div class="lab">JY1 · JPY future †</div><div class="track"><div class="bar artifact" style="width:66.5%"></div></div><div class="val">0.43</div></div>
+      <div class="row"><div class="lab">JPY spot+fwd · honest</div><div class="track"><div class="bar" style="width:47.8%"></div></div><div class="val">0.31</div></div>
+      <div class="row"><div class="lab">SF1 · CHF future †</div><div class="track"><div class="bar artifact" style="width:88.6%"></div></div><div class="val">0.58</div></div>
+
+      <div class="grp"><span>Treasury futures</span></div>
+      <div class="row"><div class="lab">TU1 · UST 2y</div><div class="track"><div class="bar" style="width:68.9%"></div></div><div class="val">0.45</div></div>
+      <div class="row"><div class="lab">FV1 · UST 5y</div><div class="track"><div class="bar" style="width:80.9%"></div></div><div class="val">0.53</div></div>
+      <div class="row"><div class="lab">TY1 · UST 10y</div><div class="track"><div class="bar" style="width:68.3%"></div></div><div class="val">0.44</div></div>
+      <div class="row"><div class="lab">US1 · UST long</div><div class="track"><div class="bar" style="width:67.4%"></div></div><div class="val">0.44</div></div>
+
+      <div class="grp"><span>S&amp;P 500 · DXY · VIX futures</span></div>
+      <div class="row"><div class="lab">SPXT · S&amp;P short</div><div class="track"><div class="bar" style="width:35.2%"></div></div><div class="val">0.23</div></div>
+      <div class="row"><div class="lab">DX1 · DXY future</div><div class="track"><div class="bar" style="width:64.5%"></div></div><div class="val">0.42</div></div>
+      <div class="row"><div class="lab">SPVXSTR · long VIX</div><div class="track"><div class="bar" style="width:48.5%"></div></div><div class="val">0.31</div></div>
+
+      <div class="baseline"></div>
+    </div>
+    <div class="chart-note">† generic-series roll-splice inflates these rows (~200 bp/yr of non-earnable return);
+    SF1's nominal “beat” of the 0.571 bar drops to 0.469 on artifact-free replica pricing. Axis 0 → 0.65 Sharpe;
+    each row on its clean joined sample.</div>
+
+    <div class="verdict">
+      <h2><span class="n">04</span> Verdict by class</h2>
+      <table>
+        <thead><tr><th>Instrument class</th><th style="text-align:center">Static</th><th style="text-align:center">Dynamic</th><th>What it's actually for</th></tr></thead>
+        <tbody>
+          <tr><td><b>JPY / CHF futures</b></td><td class="c no">✗</td><td class="c no">✗</td><td>Honest tail insurance, fully priced — stress-gated &amp; small, only under a drawdown mandate</td></tr>
+          <tr><td><b>Treasury futures</b></td><td class="c no">✗</td><td class="c no">✗</td><td>Free but weak stabiliser (vol −3–4%); best “no own-return” duration expression</td></tr>
+          <tr><td><b>S&amp;P 500 futures</b></td><td class="c no">✗</td><td class="c no">✗</td><td>Wrong way — book is long-equity-beta; short sells the ERP (−2.7%/yr, t = −3.1). Trigger-only</td></tr>
+          <tr><td><b>DXY futures</b></td><td class="c no">✗</td><td class="c no">✗</td><td>Structurally blind: carry sort ≈ dollar-neutral, DXY has no EM. Third confirmed null</td></tr>
+          <tr><td><b>VIX futures</b></td><td class="c no">✗</td><td class="c no">✗</td><td>Most reliable crash correlation, steepest premium (−33%/yr roll) — tiny, episodic only</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="rank">
+  <h2><span class="n">05</span> The JPY overlay, every way it was sized (A.3, honest replica pricing · identical stress trigger)</h2>
+  <div class="rank-row">
+    <div class="rk win"><div class="rv">0.54</div><div class="rl">de-risk the book<br>(no hedge at all)</div></div>
+    <div class="gt">&gt;</div>
+    <div class="rk"><div class="rv">0.44</div><div class="rl">unhedged<br>book</div></div>
+    <div class="gt">&gt;</div>
+    <div class="rk"><div class="rv">0.39</div><div class="rl">stress-gated h*<br>(long JPY in stress only)</div></div>
+    <div class="gt">&gt;</div>
+    <div class="rk"><div class="rv">0.31</div><div class="rl">static h* = 0.52<br>(always-on hedge)</div></div>
+    <div class="gt">&gt;</div>
+    <div class="rk"><div class="rv">0.25–0.27</div><div class="rl">dynamic rolling / expanding β<br>(textbook dynamic hedging)</div></div>
+  </div>
+</div>
+
+<div class="bottom">
+  <div class="bl-t">Bottom line</div>
+  <p><b>No futures overlay — static or dynamic — makes this book better.</b> Everything that pays in a
+  carry crash is priced as insurance and charges for it on every calm day; everything free is too weak or
+  blind to the book's EM-risk-appetite exposure. The cheapest crash protection is to
+  <b>condition the book itself</b>: de-risk on the FX-vol trigger (Sharpe 0.466 → 0.571), or the
+  stress-triggered EM-equity short — not an always-on futures hedge.</p>
+</div>
+
+<footer>
+  <span>Sources: cesare/outputs committed book · updated_bloomberg_data.xlsx (static values, verified) · outputs/hedge_comparison_summary.csv</span>
+  <span>Generated 2026-08-05</span>
+</footer>
+
+</body>
+</html>
