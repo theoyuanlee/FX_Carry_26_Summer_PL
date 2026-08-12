@@ -6,7 +6,7 @@
 
 ## Overview
 
-This folder contains four phases of work on the FX carry strategy:
+This folder contains six phases of work on the FX carry strategy:
 
 **Phase 1 — Exploration (`fx_analysis.ipynb`).** Diagnostics on G10+EM currency performance, drawdowns, correlations, and macro factor exposures.
 
@@ -15,6 +15,10 @@ This folder contains four phases of work on the FX carry strategy:
 **Phase 3 — Can we hedge it? (`dxy_hedging.ipynb`, `dxy_futures_hedging.ipynb`).** Two notebooks testing whether the book's dollar exposure can be hedged with DXY — first with the spot index, then with the tradable futures contract and fresh Bloomberg data. **Both are nulls, and the reason why is the useful part.**
 
 **Phase 4 — A hedge that works (`duration_hedge.ipynb`).** Screening every tradable instrument in the Bloomberg pull against the book. Duration is the one that survives: the real-time, cost-inclusive overlay lifts net Sharpe from **0.467 to 0.510**, clearing both project bars.
+
+**Phase 5 — Futures hedge comparison (`hedge_comparison.ipynb`).** The boss's week-of-2026-08-03 ask: test hedging with funding-currency futures (JPY) by adjusting the hedge ratio or hedging dynamically, and compare funding-currency / Treasury / S&P 500 / DXY / VIX futures pros and cons. Verdict: **no investable futures overlay — static or dynamic — beats simple de-risking of the book on the same stress trigger** (0.571 vs 0.466 unhedged). The JPY overlay is real crash insurance (best tail payoff, +34 bp/day on the worst-5% days) sold at full actuarial price (−1.8%/yr carry); Treasuries are free but too weak; equity shorts sell the ERP; DXY is structurally blind to the book; VIX bleeds −33%/yr.
+
+**Phase 6 — Protect by deleveraging, not overlaying (`em_deleveraging.ipynb`).** Follow-up to Phase 5: since no futures overlay beat de-risking, build the alternative the literature points to — a relative-volatility rule that scales the EM sleeve down when EM risk is high relative to G10, no options. **It works and clears the de-risk bar futures could not:** gross Sharpe 0.628 → **0.677**, vol cut 5.3%, +15 bp/day on the worst-5% days, deviation return **+2.0%/yr** (Newey-West t = 3.4). Holds up across subperiods, a parameter plateau, and added lag.
 
 ---
 
@@ -27,6 +31,8 @@ This folder contains four phases of work on the FX carry strategy:
 **DXY cannot hedge this book — with spot or with futures.** Individual currencies load heavily on the dollar (EUR −1.09, R² 0.85), but the *portfolio* barely does (β = +0.30, R² 3.9%). A carry sort is long some currencies and short others against USD, so the dollar largely cancels between the legs before any hedge is applied. Sweeping every hedge ratio, the best DXY futures position is **no position**.
 
 **Duration does hedge it.** Treasuries rise when the carry book falls — a carry unwind and a flight to quality are the same event. The correlation strengthens in stress (−0.13 calm → **−0.37** in the top VIX quintile) and is negative on 95% of days. Unlike every other candidate, the hedge is a *long* position in an asset that has earned a positive return, rather than a short in something that costs you to sell.
+
+**No futures overlay beats de-risking, but deleveraging the EM sleeve does.** Every hedge instrument that pays off in a crash is priced as insurance and bleeds on calm days; de-risking wins because standing aside costs nothing. A relative-volatility rule that scales the EM sleeve down when EM vol runs hot relative to G10 — no options, no overlay — captures that same logic without paying a premium, and it clears the de-risk bar every futures class missed.
 
 ---
 
@@ -166,6 +172,50 @@ Position is **long 0.18 units of TLT per unit of carry book**. TLT's quoted half
 
 ---
 
+## Phase 5 · `hedge_comparison.ipynb` — the full futures comparison
+
+**Question:** can funding-currency futures (JPY) hedge the book — statically, by hedge-ratio adjustment, or dynamically — and how do all five candidate futures classes compare?
+
+**Part A** explains why "just buy JPY" is not the trade (the book already owns a deliberate, compensated short-JPY funding leg — a static long-JPY overlay is position sizing in disguise) and runs the funding hedge three ways: static leg-scaling (A.1, monotone Sharpe loss), stress-triggered leg cuts (A.2, makes things worse — the funding legs *earned* in high-vol periods this sample), and the overlay proper on the combined book (A.3): full hedge-ratio sweep, expanding/rolling-beta dynamic hedging, and stress-gated variants. Ranking on the same trigger: **de-risk 0.541 > unhedged 0.436 > stress-gated 0.36–0.39 > static h\* 0.311 > dynamic 0.25–0.27**.
+
+**Part B** tables every instrument (funding FX, Treasury futures TU1/FV1/TY1/US1, S&P, DXY, VIX) against the book with each hedged Sharpe decomposed into variance-reduction vs instrument-own-return; **Part C** gives the pros/cons per class with a summary verdict table. No investable row beats the de-risking control.
+
+**Outputs:** `hedge_stress_scenarios.csv`, `jpy_hedge_ratio_sweep.csv`, `jpy_dynamic_hedge_variants.csv`, `hedge_comparison_summary.csv`
+
+**Data note:** the notebook auto-detects the 2026-08-03 terminal pull (`JY1 Curncy`, `SF1 Curncy` in the Dollar tab, `SPXT Index` in Equity). The re-exported **`updated_bloomberg_data.xlsx`** (2026-08-04) carries all three as static values and is the loader's first choice — the current committed run uses the real futures series, and its numbers match the archived terminal run (`outputs/archive_terminal_run_2026-08-03/`) exactly. One headline from the futures data: SF1 is the only investable row that nominally beats the de-risk control (0.576 vs 0.571), and the margin vanishes on the artifact-free CHF replica (0.469) — the generic-series roll-splice at work.
+
+---
+
+## Phase 6 · `em_deleveraging.ipynb` — protect by deleveraging, not by overlaying futures
+
+**Question:** Phase 5 showed no futures overlay beats simply de-risking the book. Why, and what does the literature's alternative — sizing the book's own exposure rather than bolting on a position — actually deliver?
+
+**Part 1 — why the futures failed, restated as one structural fact showing up five times.** (1) A carry sort already nets the dollar out between its long and short legs, so a dollar future (DX1) has nothing to grip — correlation only +0.19, rolling beta flipping −0.42 to +1.45, a static hedge that's a wash (0.446 → 0.419). (2) The crash risk is the *whole book* selling off together, not one leg — cutting only the JPY funding leg in stress made the G10 book *worse* (0.119 → 0.091), while cutting the whole book nearly doubled it (0.119 → 0.217); no single-instrument overlay spans a whole-book event. (3) Everything that pays off in a crash is priced as insurance and bleeds on calm days — long JPY costs −1.8%/yr carry, the investable VIX roll bleeds −33%/yr, a short S&P sells the equity risk premium (−2.7%/yr). De-risking wins because standing aside costs nothing.
+
+**Part 2 — the relative-volatility EM deleveraging rule.** Built from the mean-variance-efficient currency portfolio literature (Chernov, Dahlquist & Lochstoer 2023; Koijen, Richmond & Yogo 2024): the EM carry sleeve carries unpriced volatility risk that spikes in risk-off events, so the efficient response is to deleverage that sleeve when its vol runs hot relative to G10, rather than pay for options. First confirms the premise on the book's own data — EM sleeve vol (10.1%) is structurally above G10 (7.0%), with a median EM/G10 vol ratio of **1.43** widening to a 90th-percentile **2.49** and a peak of **5.21** exactly when the book is under stress. Then builds the rule: each day, take the lagged (tradeable) EM/G10 rolling-vol ratio, convert to an expanding z-score, and scale the EM sleeve down toward a floor when the z-score is high — G10 is never touched. `book_scaled = G10_sleeve + k(t) * EM_sleeve`, `k(t) ∈ [k_floor, 1]`. This is deleveraging, not an overlay: no new position is ever added, so no hedge premium is ever paid — the only cost is EM carry foregone in the windows the signal flags as dangerous.
+
+**Result — clears the bar futures could not.** All figures are gross of cost (the reconstructed G10+EM sleeves post 0.628 gross vs the committed 0.466 net; the rule is judged against the honest 0.628 gross baseline, not the net headline):
+
+| Variant | Sharpe (gross) | ann vol | max DD | tail bp (worst 5%) | deviation carry %/yr | NW t |
+|---|---|---|---|---|---|---|
+| unhedged book (ALL_net, for reference) | 0.466 | 11.19% | −33.2% | — | — | — |
+| reconstructed book (G10+EM sleeves) | 0.628 | 11.18% | −29.8% | +1.18 | +1.81 | 14.3 |
+| **relvol deleverage (the rule)** | **0.677** | **10.59%** | −29.8% | **+15.2** | **+1.96** | **3.4** |
+| naive EM-off in stress | 0.767 | 10.05% | −25.1% | +45.3 | +2.50 | 1.9 |
+| whole-book de-risk control | 0.571 | 9.26% | −26.4% | +60.5 | +0.08 | 0.1 |
+
+The rule lifts gross Sharpe 0.628 → **0.677**, cuts vol 5.3%, and pays **+15 bp/day** on the worst-5% days, with the deviation return (+2.0%/yr) statistically real (NW t = 3.4) — and it clears the **0.571** de-risk control, the bar no futures overlay cleared. It is the mirror image of the futures result: on the 86% of days the scaler sits at full size, nothing is given up, so the deviation *adds* return instead of costing it as every futures hedge did. The naive EM-off-in-stress control scores higher (0.767) by switching the whole EM sleeve off rather than scaling it proportionally — flagged as a coarser action to separate out, not yet credited as a better signal.
+
+**Robustness — passes all three checks.** Subperiods: beats the unhedged book in all four windows and the de-risk control in three of four (misses only 2011–2015, the flat-carry stretch, 0.06 vs 0.26). Parameters: the floor-by-threshold sweep is a plateau (all 25 cells between 0.66–0.69), not a knife-edge peak. Lag: survives extra lag intact — Sharpe is 0.677 at the one-day lag already used and rises to 0.68–0.70 with one or two more days, so it isn't living on look-ahead.
+
+**Open item:** the naive EM-off control's higher raw Sharpe (0.767) is presented as aggressive drawdown-cutting rather than a better signal; confirming that requires matching the two variants on realized vol before comparing, flagged as the next step rather than resolved here.
+
+**Sources.** Chernov, M., Dahlquist, M., and Lochstoer, L. (2023), "Pricing Currency Risks," *Journal of Finance* — the unpriced-volatility-risk argument for deleveraging EM rather than holding it at constant size. Koijen, R. S. J., Richmond, R. J., and Yogo, M. (2024), currency-demand and mean-variance-efficient portfolio work — frames the EM sleeve's risk as a spanned, timeable exposure. The stress trigger and de-risk control reuse the JPMVXYG7 G7 FX-implied-vol construction from `hedge_comparison.ipynb`, kept identical so the benchmarks line up. The options-based conditional-hedging strand (Jurek 2014; Burnside et al. 2011; risk-reversal and volatility-surface triggers) is explicitly out of scope — a teammate's workstream; everything here uses forwards, futures returns, and position sizing only.
+
+**Outputs:** `em_deleveraging_compare.csv`
+
+---
+
 ## The hedging arc, in one paragraph
 
 Individual currencies are hugely dollar-driven, but the *portfolio* is not — a long/short carry sort cancels the dollar between its legs, so there is almost nothing for DXY to hedge, and what little remains is the compensated euro-funding tilt the carry signal deliberately wanted. Two independent instruments (spot and futures) confirm this with the same mechanism. The exposure that *does* threaten the book is the EM crash channel, which DXY structurally cannot see because it contains no EM. Duration reaches that risk directly: a carry unwind and a flight to quality are the same event, so Treasuries rally when the book falls, and the hedge is a long position in a returning asset rather than a short in something that costs to sell.
@@ -191,11 +241,11 @@ cd arjun
 jupyter lab
 ```
 
-Suggested order: `fx_analysis` → `robustness_audit` → `em_carry_attribution` → `dxy_hedging` → `dxy_futures_hedging` → `duration_hedge`.
+Suggested order: `fx_analysis` → `robustness_audit` → `em_carry_attribution` → `dxy_hedging` → `dxy_futures_hedging` → `duration_hedge` → `hedge_comparison` → `em_deleveraging`.
 
-`em_carry_attribution` reads the robustness jackknife for its tie-back chart. The two DXY notebooks and `duration_hedge` are independent of each other.
+`em_carry_attribution` reads the robustness jackknife for its tie-back chart. The two DXY notebooks and `duration_hedge` are independent of each other. `em_deleveraging` reuses `hedge_comparison`'s stress trigger and hard-codes its Phase 5 headline numbers for the recap table, so run `hedge_comparison` first if those numbers need refreshing.
 
-**Requirements:** pandas, numpy, scipy, statsmodels, matplotlib, **pyarrow ≥ 24** (parquet), **openpyxl** (Bloomberg workbook).
+**Requirements:** pandas, numpy, scipy, statsmodels, matplotlib, **pyarrow ≥ 21** (parquet — the anaconda *base* env's pyarrow 19 fails on the repo parquets with "Repetition level histogram size mismatch"; the **`finm` conda env works**: `conda activate finm`), **openpyxl** (Bloomberg workbook).
 
 **Reproducibility:** common window 2007-05 → 2026-06; no lookahead (`ffill().shift(1)`); Newey-West HAC inference; every track reported gross **and** net of costs; a reconciliation gate at the top of each notebook asserts rebuilt books match the committed Sharpes (G10 0.119 / ALL 0.466) to within 5e-3.
 
@@ -213,6 +263,8 @@ Suggested order: `fx_analysis` → `robustness_audit` → `em_carry_attribution`
 
 5. **A duration overlay is the recommended direction.** Real-time, cost-inclusive: 0.467 → 0.510, clearing both bars. But present it with the decomposition attached — most of the gain is Treasuries' own return, and 2022 shows the failure mode. Front-end Treasuries are the next test and would make the case cleaner.
 
+6. **If a standing overlay is off the table, deleverage the EM sleeve instead.** No futures class — funding FX, Treasuries, equity, DXY, VIX — beat simply de-risking the book, because every instrument that pays off in a crash is priced as insurance and bleeds on calm days. A relative-EM/G10-volatility rule that scales the EM sleeve down in stress captures the same protection without paying that premium: gross Sharpe 0.628 → 0.677, clearing the 0.571 de-risk bar, with a statistically real +2.0%/yr deviation return (t = 3.4). It holds up across subperiods, parameters, and lag — the cleanest options-free protection tested so far.
+
 ---
 
 ## Files in this folder
@@ -224,10 +276,14 @@ Suggested order: `fx_analysis` → `robustness_audit` → `em_carry_attribution`
 - `dxy_hedging.ipynb` — DXY spot hedge test (null; explains why)
 - `dxy_futures_hedging.ipynb` — DXY futures hedge test with roll adjustment and real costs (null confirmed)
 - `duration_hedge.ipynb` — instrument screen and the duration overlay (clears the bar)
+- `hedge_comparison.ipynb` — funding-currency (JPY) hedge-ratio/dynamic tests + five-class futures comparison with pros/cons
+- `em_deleveraging.ipynb` — why the futures failed (structural), and the relative-vol EM deleveraging rule that clears the de-risk bar
 - `fx_findings.ipynb` — presentation notebook with spoken scripts
 
 **Code & data**
 - `arjun_utils.py` — helper module wrapping the shared `cesare/fx_utils.py` engine
-- `FX_Carry_Bloomberg_DATA_clean.xlsx` — static Bloomberg pull of the hedge instrument universe
-- `outputs/` — all CSV outputs (`robustness_*`, `attribution_*`, `dxy_*`, `dxyfut_*`, `duration_*`)
+- `FX_Carry_Bloomberg_DATA_clean.xlsx` — static Bloomberg pull of the hedge instrument universe; still the only workbook `duration_hedge.ipynb` and `dxy_futures_hedging.ipynb` load, so keep it in the folder
+- `updated_bloomberg_data.xlsx` — the live workbook: 2026-08-04 re-export with the JY1/SF1/SPXT static-value columns; `hedge_comparison.ipynb` and `em_deleveraging.ipynb` prefer this one, falling back to `FX_Carry_Bloomberg_DATA_clean.xlsx`
+- `outputs/` — all CSV outputs (`robustness_*`, `attribution_*`, `dxy_*`, `dxyfut_*`, `duration_*`, `hedge_*`, `jpy_*`, `em_deleveraging_compare.csv`)
+- `outputs/archive_terminal_run_2026-08-03/` — archived hedge_comparison run with the real JY1/SF1/SPXT columns loaded
 - `README.md` — this file
