@@ -1,7 +1,7 @@
 # 9. What did not work
 
 *Chapter 9 of the final report (plan §14.3 item 7). Draft 2026-08-03; D1 restated on model-free skewness 2026-08-04.*
-*Every number below is reproducible from a committed CSV in `cesare/outputs/`.*
+*Every number below is reproducible from a committed CSV in `evidence/`.*
 
 ---
 

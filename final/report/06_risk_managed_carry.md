@@ -1,7 +1,7 @@
 # 6. Risk-managed carry: hedging, construction, momentum and regimes
 
 *Chapter 6 of the final report. Draft, 2026-08-04.*
-*Every number below is reproducible from a committed CSV in `cesare/outputs/`.*
+*Every number below is reproducible from a committed CSV in `evidence/`.*
 
 ---
 

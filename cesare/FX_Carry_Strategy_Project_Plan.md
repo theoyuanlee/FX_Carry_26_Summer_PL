@@ -2,7 +2,10 @@
 
 *Author: Cesare Bavaresco · UChicago Summer Project Lab with Bank of America (Corporate Treasury / Global Funding).*
 *Data: daily Bloomberg, 2007-01 → 2026-06, G10 + EM currencies vs USD.*
-*Last updated: 2026-08-04 (W4 executed: D1 rerun, D2, the Aug 5 deck, and the full `report/`).*
+*Last updated: **2026-08-11** — the evaluation closed (the VIX-gate verdict re-argued, Oleg and
+Theo's August work recorded as named gaps, one component-verdict table covering all six
+workstreams) and the `final/` hand-off package built (§20). Previously 2026-08-04, which predated
+the §14.6 cleanup of 2026-08-05.*
 *Status legend: ✅ done · 🔶 partial · ⬜ not started.*
 
 This document replaces the original generic project outline. It is now git-tracked and serves as the
@@ -169,7 +172,8 @@ Stage dashboard:
 | **P4-B tail-event forecast (§19.3)** | ✅ **done 2026-08-03 (W3) — NULL** | `cesare/tail_forecast.py` | `p4_tail_forecast_eval.csv`, `p4_tail_overlay_stats.csv`, `p4_tail_overlay_by_episode.csv`, `p4_tail_feature_importance.csv` |
 | **P4-C combined engine (§19.4)** | ✅ **done 2026-08-03 (W2–W3)** | `strategy/overlays.py` + `COMBINED` preset, `cesare/combined_engine.py` | `p4_component_standalone.csv`, `p4_component_by_episode.csv`, `p4_combined_ladder.csv`, `p4_combined_by_episode.csv`, `p4_selection_vs_derisking.csv` |
 | **P4-D delivery (§19.5, §14.2/14.3)** | ✅ **done 2026-08-04 (W4)** | `report/` | `final_comparison.csv` ✅ (**232 rows**, 0 duplicate keys); `final_comparison_by_episode.csv` ✅ (**652 rows**, 38 variants, 6 gaps recorded in-file); **all 11 report chapters** ✅ |
-| Final evaluation & report | ✅ **done 2026-08-04** | §14.1 metrics ✅; repo hygiene ✅ (cesare/, §14.4); §14.2 **both** tables ✅; §14.3 **all 11 chapters written** ✅; §14.5 collation ⬜ | `final_comparison{,_by_episode}.csv`; `report/01..11_*.md` |
+| Final evaluation & report | ✅ **done 2026-08-04** | §14.1 metrics ✅; repo hygiene ✅ (cesare/, §14.4); §14.2 **both** tables ✅; §14.3 **all 11 chapters written** ✅; §14.5 collation ✅ (done 2026-08-04 — the header said so, this cell did not) | `final_comparison{,_by_episode}.csv`; `report/01..11_*.md` |
+| **Hand-off package (§20)** | ✅ **built 2026-08-11** | `final/` | the engine, the adopted components, every runtime input vendored, 60 evidence CSVs, 6 test suites, the report; `final/reproduce.py` |
 
 **Base adoption (§18):** Dafu ✅ · Arjun ⬜ · Theo ⬜ · Vidhi ⬜ · Oleg ⬜. Deadline: the
 **2026-08-12** BofA meeting.
@@ -544,6 +548,14 @@ Reference: extends the Stage-2 crash-risk finding; Ledoit–Wolf N/A here.
 (a) descriptively where carry earns, and (b) whether regime-aware de-risking beats the best Stage-3
 hedges net of costs.
 
+**⚑ Coverage caveat (added 2026-08-11, Appendix C #40).** `regime_series.csv` starts **2008-06-11**,
+because the composite needs a trailing percentile window before it can label anything. So the
+classification **cannot see the pre-crisis era or the first nine months of GFC 2008**:
+`stage6_conditional_by_regime.csv` totals 3,603 + 822 + 277 = **4,702 days against the base's
+5,001**, and the 299-day shortfall is exactly that missing head. The conditional findings below are
+therefore about 2008-06 onward, not the full sample — which matters most for the Crisis bucket,
+whose defining episode is half outside the series that defines it.
+
 **What exists**
 
 - **`fx_utils.regime_classify(indicators, lookback=756, breaks=(0.70, 0.90))`** — ranks each
@@ -589,7 +601,7 @@ buys tail insurance, not Sharpe.
 - **Outputs:** `outputs/regime_series.csv` (daily ranks + composite + regime), `stage6_regime_stats.csv`
   (7 variants × gross/net + benchmark), `stage6_conditional_by_regime.csv`.
 
-## 13. Stage 7 — Machine Learning Extension (Optional) ⬜
+## 13. Stage 7 — Machine Learning Extension (Optional) ✂️ **descoped** (§19.6) — the CV scheme survived as P4-B
 
 **Status:** not started; **deferred to the "back pocket" (decision 2026-07-10)**, and **descoped for
 good on 2026-08-03**: the full five-model version is cut for the August runway (§19.6). What
@@ -619,13 +631,17 @@ observations that silence is a lookahead trap (Appendix C #8). Specs:
 
 - **Dependencies:** Stage 5 (momentum features), Stage 6 (regime features); adds scikit-learn
   (+xgboost) to requirements.
-- **Outputs:** `outputs/stage7_ml_forecast_eval.csv` (OOS R², sign hit rate per model/fold),
-  `outputs/stage7_ml_strategy_stats.csv`.
+- **Outputs:** ✂️ **none — descoped, never produced** *(corrected 2026-08-11, Appendix C #39)*.
+  This block used to name `outputs/stage7_ml_forecast_eval.csv` and
+  `outputs/stage7_ml_strategy_stats.csv` as deliverables while Appendix A listed them as *Deferred*
+  and §19.6 descoped Stage 7 outright. Neither file was ever written. What survived of this stage is
+  its **CV scheme**, which P4-B inherited and implemented as `tail_forecast.purged_walkforward`
+  (§19.3) — and that ran, and returned a null.
 - **Acceptance criteria:** every result strictly out-of-sample under the purged scheme;
   net-of-cost comparison vs both simple competitors; feature-importance table with a stated
   stability caveat.
 
-## 14. Final Evaluation, Report & Repo Hygiene 🔶
+## 14. Final Evaluation, Report & Repo Hygiene ✅
 
 ### 14.1 Metric library completion ✅ (done with Stage 3)
 
@@ -638,7 +654,7 @@ observations that silence is a lookahead trap (Appendix C #8). Specs:
 - `strategy_summary_stats.csv`, `summary_stats_carry_excess.csv`, `summary_stats_spot.csv`
   regenerated (both notebooks re-executed).
 
-### 14.2 Consolidated comparison table ⬜ *(scope widened 2026-08-03)*
+### 14.2 Consolidated comparison table ✅ *(scope widened 2026-08-03; both tables built W1–W4)*
 
 **Two artifacts, not one** — the second is what the desk will actually read (§6.8):
 
@@ -683,7 +699,7 @@ omits the carry accrual; Theo's results are parquet-only; Oleg has no committed 
 1–6 plus D3 were deliberately not retrofitted because the per-window standard is prospective
 (§19.2). A gap stated in the artifact is a gap; a gap omitted from it is a claim.
 
-### 14.3 Final report outline 🔶 (deliverable for BoA; `report/`) *(restructured 2026-08-03)*
+### 14.3 Final report outline ✅ (deliverable for BoA; `report/`) *(restructured 2026-08-03; all 11 chapters written 2026-08-04)*
 
 ✅ **Skeleton and the null-results chapter written W3** — `report/README.md` (chapter table, the six
 rules the report follows, headline numbers for cross-checking) and
@@ -1304,7 +1320,7 @@ and the shared `data/raw/` starts in 2007.
 (so `src/fxcarry/` is not absorbed); an options *pricing* layer; packaging (`pyproject.toml`) and
 a repo-wide `requirements.txt` — both belong to the §14.5 repo-wide collation.
 
-### 18.1 Adoption tracker ⬜ — the gate for Phase 4 *(added 2026-08-03)*
+### 18.1 Adoption tracker 🔶 **1 of 5, and no longer the gate** — the Aug-12 deadline is tomorrow *(added 2026-08-03; status 2026-08-11)*
 
 The base exists; **adoption does not follow automatically**, and this is now the binding constraint
 on §19. Nothing can be folded into a combined engine until the components are built on the same
@@ -1328,7 +1344,7 @@ re-price-don't-rebuild fallback in §15.
 
 ---
 
-## 19. Phase 4 — Integration & Delivery (Aug 2026) 🔶 ← **current focus**
+## 19. Phase 4 — Integration & Delivery (Aug 2026) ✅ **delivered** — see §20 for the hand-off package
 
 **Why.** Phase 3 asked whether a differentiated *signal* could beat the simple book. Three times the
 answer was no (§17: D1 skew, D3 basis, D6 term structure). Meanwhile the desk asked for something
@@ -1575,7 +1591,7 @@ evaluation window (`describe()` omits `start`/`end`, so the window is added expl
 to 0.0e+00); `report_windows(run())` returns fully populated rows for every sub-120-day window;
 the numbers reproduce the `STRESS` table above; the per-leg split reconciles at **3.88e-17**.
 
-### 19.3 P4-B — Tail-event forecast signal ⬜ *(the desk's central ask)*
+### 19.3 P4-B — Tail-event forecast signal ✅ **done 2026-08-03 (W3) — NULL** *(the desk's central ask)*
 
 **Target the loss, not the return.** The desk was explicit: minimizing large losses is worth more
 than adding incremental gains, because one crash breaks the compounding path. So the forecast target
@@ -1690,7 +1706,7 @@ attempt. It scores 0.2974 — worse still.
 *Correction to this section's own spec: it says "twelve features"; its bulleted list enumerates
 **sixteen** once levels and changes are counted separately. The list was implemented as written.*
 
-### 19.4 P4-C — The combined engine ⬜
+### 19.4 P4-C — The combined engine ✅ **done 2026-08-03 (W2–W3)**; VIX-gate verdict re-argued 2026-08-11
 
 **The interface problem, stated before it bites.** `StrategyConfig` carries exactly **one**
 `exposure: pd.Series | None` and **one** `weight_overlay: Callable | None`. Four teammates each want
@@ -1836,11 +1852,59 @@ that row at **0.0e+00**; `test_combined.py` 8/8.
    improvement is simply holding less; selection's alpha is +1.25%/yr, **t 0.92**. What selection
    genuinely buys is skew, −0.63 → −0.31. The combined book also runs at **8.8% vol, not 10%** — so
    its MaxDD is partly a lower risk level, and the comparison is stated that way.
-3. **The two ladders disagree about the VIX gate** — add-one-in says 3 of 6 windows (fail),
-   leave-one-out says removing it costs 0.043 Sharpe (pass). Per the pre-registered protocol it is
-   marked **not robust** and excluded on the strict reading of criterion (i). That decision costs
-   0.043 of net Sharpe, and taking the cost rather than re-reading the rule is what pre-registration
-   is for. Both numbers are in the CSV.
+3. **The VIX gate is the one contested verdict, and the contest is real.** ⚑ **Re-examined and
+   closed 2026-08-11** — the verdict is unchanged, the reasoning behind it is not. The paragraph
+   this replaces said "the two ladders disagree, therefore not robust, therefore excluded"; two of
+   its three clauses were wrong, and finding that out took reading the code rather than the CSV.
+
+   **`ladders_agree=False` is an artifact of comparing two different tests** (Appendix C #36).
+   `combined_engine.py:670-672` compares the `add` pass's `slot_earned` — windows **and** cost —
+   against the `loo` pass's `d_net_sharpe > 0`, a Sharpe-sign test. Read like-for-like
+   (`slot_earned` vs `slot_earned`) **the two ladders agree, both False**, and the VIX gate is the
+   only component where the two conventions diverge, which is precisely why it is the only flagged
+   row. So the exclusion cannot rest on "the ladders disagree" — they do not. Correcting this makes
+   the rejection *stronger*, not weaker, which is why it is worth stating.
+
+   **The gate is measured four times, and the fourth accepts:**
+
+   | Pass | Measured on | Windows | `slot_earned` |
+   |---|---|---|---|
+   | `add` rung 2 | added to `duration` | 3/6 | False |
+   | `final` rung 2 | added to `duration` *(the same two books)* | 3/6 | False |
+   | `loo` | removed from `duration\|regime\|skew` | 3/6 | False |
+   | **`final_loo`** | removed from `duration\|skew` — **the stack actually proposed** | **4/6** | **True** |
+
+   Three reject, one accepts — and the accepting one is the measurement guardrail §6.13 privileges.
+   Meanwhile the **tail objective accepts it outright** (§19.3: −0.0007 Sharpe for +4.82pp MaxDD).
+   Two pre-registered criteria, opposite answers, on the only teammate component whose owner
+   actually ported onto the base.
+
+   **Verdict: REJECT, on the §19.4 slot rule, with criterion (i) measured add-one-in.** The two
+   criteria answer different questions rather than contradicting each other. The tail objective is
+   an *admission* test — is this rule worth considering, given the desk's stated objective? Yes. The
+   slot rule is a *membership* test — has it earned a place in this stack, against components
+   competing for the same risk budget? It was written later and specifically to decide that, and it
+   is the more demanding. Within it, criterion (i) is an add-one-in measurement **by construction** —
+   that is the orientation `_slot_verdict(res, prev)` uses on the `add` and `final` ladders — and on
+   both stacks where the gate is *added* it improves 3 of 6. Criterion (iii), leave-one-out, is a
+   separate conjunct and it passes. A conjunction with a failing term fails.
+
+   The counter-argument, at full strength because it deserves it: §6.13 says re-measure on the stack
+   actually proposed, `final_loo` is that measurement, and it returns 4/6. Someone treating §6.13 as
+   the senior rule reaches the opposite conclusion. **What decides it is when each rule was written.**
+   The slot rule and its orientation were fixed before any component was measured; §6.13 was added
+   mid-execution to fix the specific defect of measuring survivors against a stack containing a
+   since-rejected component — which applies to the `loo` row, not to the add rows. Extending it to
+   overturn a pre-registered add-pass *after* seeing that doing so is worth +0.043 Sharpe is the
+   move pre-registration exists to prevent.
+
+   **The decision costs 0.043 net Sharpe and 5.4% of relative CVaR₉₉** (0.020025 → 0.018942).
+   It costs **nothing** in MaxDD, and that is not luck — see Appendix C #37. Paying the cost rather
+   than re-reading the rule is the whole point; a rule that only binds when it is free is not a rule.
+   The gate-in book therefore ships as a **named, tested, non-default preset** in the hand-off
+   package — `run("COMBINED_TAIL")`, gross 0.6808 / net 0.5323 / MaxDD −19.07% / CVaR₉₉ 0.0189,
+   reproducing this ladder's `final` rung 3 exactly — so the desk can price the decision instead of
+   taking it on trust (§20). `ADOPTED` is unchanged and no committed number moves.
 4. **Vidhi's gate is the single most destructive component tested** (0.4659 → 0.0964; removing it
    from the stack is worth +0.33). The diagnostic matters more than the number: its correlation with
    VIX is ≈0 at every lead and lag, and it fails under **both** possible lag conventions, so the
@@ -1850,7 +1914,7 @@ that row at **0.0e+00**; `test_combined.py` 8/8.
 `p4_combined_by_episode.csv`, `p4_selection_vs_derisking.csv`. Built by
 `cesare/combined_engine.py`.
 
-### 19.5 P4-D — Delivery ⬜
+### 19.5 P4-D — Delivery ✅ **done 2026-08-04**; packaged as `final/` on 2026-08-11 (§20)
 
 Three artifacts, and nothing else counts as done (per §14.2, §14.3):
 
@@ -1881,6 +1945,63 @@ Saying this explicitly is what keeps the four-week schedule honest.
 | **Macro adds** — EM CB cycles, elections, trade balances, NFP/CPI/growth | Oleg's workstream; my job is to make sure he uses the same frozen windows | §19.1, tracked |
 | **Option insurance / 2009 diagnosis** | Dafu's workstream; blocked on option bid/ask for honest costing — flag to the desk rather than report a free-premium Sharpe | §19.1, tracked |
 | **December / year-end liquidity study** | Diagnostic, not a strategy change | §19.1, report sidebar |
+
+---
+
+## 20. The hand-off package — `final/` ✅ (2026-08-11)
+
+**Why.** Everything §19 delivered was true and none of it was portable. `run("COMBINED")` read three
+teammates' committed files at runtime and raised `FileNotFoundError` if any was absent; the
+definition of the strategy — `ADOPTED`, the component registry — lived in `cesare/`, a personal
+folder, and was imported by the shared base, which is backwards; and the evidence, the report and
+the tests were spread across four folders that will not survive the hand-off. `final/` is the same
+strategy with none of those dependencies: **the artifact that goes to Bank of America**, built so
+the other folders can be deleted without it noticing.
+
+**What it contains** (110 files, 39 MB, of which 35 MB is data):
+
+| Part | What | Origin |
+|---|---|---|
+| `strategy/` | the engine — five modules | **byte-identical** copies of `strategy/*.py`, except `config.py`, which gains the `COMBINED_TAIL` preset and imports the components locally instead of from `cesare` |
+| `combined_engine.py` | **the strategy definition** — `ADOPTED`, the components, both ladders | vendored from `cesare/combined_engine.py`; four path constants repointed, nothing else |
+| `inputs/` | the three teammate outputs the strategy reads | `arjun/outputs/duration_hedge_series.csv`, `theo/data/processed/fx_option_signal_panel.parquet`, `vidhi/outputs/adaptive_strategy_returns_monthly.csv` — byte-identical, with SHA-256 and origin commit per file |
+| `data/raw/` | 13 `*_wide.parquet` + `ticker_manifest.csv`, **35.2 MB** | the only files any runtime path opens. The 13 `*_long.parquet` (45 MB), `FX_extra_data.xlsx` and the eight pull-diagnostic CSVs are deliberately excluded and the exclusion is recorded |
+| `evidence/` | all 59 committed CSVs + `component_verdicts.csv` | whole-folder copy of `cesare/outputs/`; at 2.6 MB, curating a subset would have cost more than it saved and created a "which one did we forget" question |
+| `tests/` | the four suites + two new ones | re-rooted at the package; `test_combined.py` gains a ninth test |
+| `report/` | the eleven chapters + README | copied, with in-package paths rewritten |
+| `README.md` · `VERDICTS.md` · `reproduce.py` · `verdicts.py` · `requirements.txt` | new | the front door, the evaluation, the one-command reproduction, the verdict builder, five packages |
+
+**Three decisions worth recording, because each had a real alternative.**
+
+1. **The data was copied, not referenced.** `fx_utils.py:21` resolves `RAW_DIR` as a sibling of the
+   `strategy` package, so a vendored engine looks for `final/data/raw`. The alternatives were a
+   symlink (fragile on Windows) or patching that line (which would stop the engine being a
+   byte-identical copy, and byte-identity is what makes drift detectable). 35 MB and no cleverness
+   beat 0 MB and a trick, for an artifact whose whole job is to be trusted by a stranger.
+2. **The `strategy → cesare` seam was fixed inside `final/` only.** `strategy/config.py:252` and
+   `strategy/tests/test_combined.py:117` in the shared repo are **untouched**, so the 48 tests and
+   every teammate import keep working exactly as before. The dependency points the right way round
+   inside the package that ships, and the multi-person repo is left alone until it is retired
+   deliberately.
+3. **No notebooks.** They are 3.7 MB and 928 KB with embedded figures, and they are the historical
+   record rather than the deliverable. The reproducible narrative is `reproduce.py` + `evidence/` +
+   `report/`.
+
+**The acceptance test is not "do the tests pass".** It is *"would this run if every other folder
+were deleted"*, and it was answered by doing it: `final/` was copied alone into an empty directory —
+no repository, no git, no sibling folders — and all six suites plus `reproduce.py` ran there and
+reproduced every published number. `tests/test_standalone.py` keeps the answer honest by tracing
+every file opened during a full run (18 distinct files, 0 outside the package) rather than by
+reasoning about it.
+
+**The cost of vendoring is two copies that can drift**, and this project has already paid it once
+(`cesare/requirements.txt`, §14.6). `tests/test_vendor_drift.py` hashes every copied file against
+its source, declares the six patched lines and fails on any undeclared difference — and reports
+*unverifiable* rather than failing once the sources are gone, which is the correct end state.
+
+**Nothing about the strategy changed.** `ADOPTED` is still `("duration", "skew_excl")`, every
+acceptance number is unmoved, and `COMBINED_TAIL` is additive — a name for a ladder rung that has
+been in `p4_combined_ladder.csv` since Phase 4.
 
 ---
 
@@ -1938,7 +2059,20 @@ Saying this explicitly is what keeps the four-week schedule honest.
 | ✅ `final_comparison.csv` · ✅ `final_comparison_by_episode.csv` | `final_evaluation.final_comparison{,_by_episode}`, §14.2 | every named variant across all workstreams, whole-sample (**232 rows, 7 owners, 5 not on base, 0 duplicate keys**) and per window (**652 rows, 38 variants, 6 gaps recorded as explicit rows**). Two metric conventions coexist and must not be compared across: `daily_net` and `monthly_uncosted` (D2) |
 | ✅ `presentations/deck_2026_08_05.html` | `cesare/build_deck.py` | the Aug 5 BofA progress deck — one self-contained HTML file, 7 matplotlib figures inlined as SVG, every number read from a committed CSV and asserted against `run()` before the page is written. **Not in `outputs/`** — it lives with the other two decks in `cesare/presentations/` (repo hygiene, 2026-08-05) |
 
-**Deferred:** `stage7_ml_forecast_eval.csv`, `stage7_ml_strategy_stats.csv` (§13 — descoped, §19.6).
+**Never produced:** `stage7_ml_forecast_eval.csv`, `stage7_ml_strategy_stats.csv` — Stage 7 was
+descoped (§13, §19.6) and these were never written. Previously listed as "Deferred" here while §13
+still named them as `Outputs:`; corrected 2026-08-11 (Appendix C #39).
+
+**Hand-off package — `final/`** (§20, built 2026-08-11):
+
+| Artifact | Produced by | Contents |
+|---|---|---|
+| ✅ `final/evidence/component_verdicts.csv` | `final/verdicts.py` | **The Part-A centrepiece.** 16 components across all six workstreams — owner, hook, pre-registered bar, measurement, verdict, reconstruction method, evidence file, caveat. Adoptions, rejections, and the two named gaps in one table. Every number is read out of a committed CSV rather than typed in, so it cannot drift from the evidence |
+| ✅ `final/evidence/*.csv` (59) | copies of `cesare/outputs/` | byte-identical, verified by SHA-256 |
+| ✅ `final/inputs/` (3 + PROVENANCE.md) | copies of Arjun's, Theo's and Vidhi's committed outputs | the strategy's runtime inputs, with size, hash, origin commit and reconstruction method per file |
+| ✅ `final/data/raw/` (14 + PROVENANCE.md) | copies of `data/raw/*_wide.parquet` + the manifest | the only data any runtime path opens; the 22 excluded files are listed with the reason |
+| ✅ `final/README.md` · `final/VERDICTS.md` | new | the front door, and the evaluation closed |
+| — `final/reproduce.py` | new | not an artifact but the way to check them all: runs the four books, asserts every published number, exits non-zero on drift |
 
 ## Appendix B — References
 
@@ -2216,3 +2350,83 @@ universe, see §17.2):
     rewrite a committed deliverable on every run, and churning a frozen artifact to fix a
     documentation error is the trade #33 already declined. *"Produced by" is a testable claim too,
     not just "exists".*
+
+*Corrections 36–40 added 2026-08-11 while closing the evaluation and building `final/` (§20);
+all verified by execution.*
+
+36. **`ladders_agree` compares two different tests, and the project's only contested verdict rested
+    on it.** `combined_engine.py:670-672` builds the column as
+    `add_earned[component] == bool(loo_row["d_net_sharpe"] > 0)` — the **add** pass's `slot_earned`
+    (windows **and** cost) against the **loo** pass's **Sharpe sign**. Those are not the same
+    predicate, so "the ladders agree" is not what the column measures. Read like-for-like
+    (`slot_earned` vs `slot_earned`) all four components agree across the two ladders, including the
+    VIX gate — both `False`. The gate is the only component where the two conventions diverge, which
+    is exactly why it is the only `ladders_agree=False` row in the file, and §19.4 finding 3 read
+    that flag as evidence the component was "not robust". **The verdict does not change** — the
+    corrected reading makes the rejection stronger, not weaker — but the reason given for it was
+    wrong, and a right answer reached through a wrong argument is one bad day away from being a
+    wrong answer. Rewritten in §19.4 to rest on criterion (i)'s add-one-in orientation instead.
+    Left in the CSV rather than recomputed: the column is committed, four ladders' worth of rows
+    depend on it, and renaming or redefining a shipped artifact to fix a documentation defect is the
+    trade #33 and #35 both declined. *Lesson: a derived boolean is a claim about what was compared,
+    and nobody had checked what it compared.*
+37. **The identical −0.190665 MaxDD across two different books is legitimate, and diagnosing it
+    changed what the tail evidence means.** `p4_combined_ladder.csv` reports the same maximum
+    drawdown to six decimals for `duration|vix_gate|skew_excl` and `duration|skew_excl` — which
+    looks exactly like a copy-paste defect. It is not. `run("COMBINED")`'s drawdown episode is
+    **2013-05-17 → 2013-12-05** (taper tantrum), and Dafu's VIX gate is fully invested on **all 145
+    days** of it: `(gate < 1).groupby(year).mean()` is **0.000** for 2012, 2013 *and* 2014. The daily
+    returns are identical across the whole peak-to-trough stretch, so the drawdown depth must be
+    too; the residual **1.6e-15** is floating-point accumulation in a wealth curve running from
+    2007, and the committed CSV shows the same 1.58e-15. The same mechanism explains the file's
+    second identical pair (−0.218079), where the differing component is Vidhi's gate, which only
+    starts 2012-02. **The consequence is the finding:** whole-sample MaxDD is *structurally blind*
+    to this gate, so any argument for or against it that leans on MaxDD is leaning on a statistic
+    that cannot see it — including §19.3's own headline "+4.82pp of MaxDD", which is measured
+    standalone on the baseline and does not transfer to the stack. CVaR₉₉ is the tail measure that
+    moves on the final stack (0.020025 → 0.018942, −5.4% relative). Guarded by
+    `final/tests/test_combined.py::test_combined_tail_is_the_documented_alternative`, which asserts
+    the gap stays at noise level so the diagnosis cannot go stale unnoticed.
+38. **`survivors` is not `ADOPTED`, and the column name says otherwise.** Every one of the 16 rows
+    of `p4_combined_ladder.csv` carries `survivors = duration|vix_gate|skew_excl` — three names —
+    while the shipped book holds two. Not a contradiction: `ladder()` builds `survivors` from
+    `if verdict["d_net_sharpe"] > 0` (`:647`), a **Sharpe-sign filter** deciding who enters the
+    `final` re-ladder, whereas `ADOPTED` is set from that re-ladder's `slot_earned`, the actual slot
+    rule. The VIX gate passes the first and fails the second. This also reconciles
+    `cesare/README.md`'s "two of four components earn a slot" against the three-name column, which
+    read as a straight inconsistency and is not one. Recorded rather than renamed, per #33/#35, and
+    restated in `final/evidence/README.md` where a reader meets the file without this document.
+39. **§13's `Outputs:` block names two CSVs the project decided not to produce.** Lines 622–623
+    list `outputs/stage7_ml_forecast_eval.csv` and `outputs/stage7_ml_strategy_stats.csv` as
+    deliverables, while Appendix A calls them *Deferred* and §19.6 descopes Stage 7 outright. Neither
+    exists. **Sixth instance of this document's signature failure mode** (#12, #18, #26, #28, #30,
+    #35). Found by scanning every markdown link and every backticked filename across the plan, both
+    READMEs, `cesare/outputs/README.md`, the root README and all eleven report chapters:
+    **64 links + 357 filenames + 18 glob patterns resolve, and these two do not.** That hit rate is
+    the good news; the rule is unchanged — *a claim in this document that an artifact exists is a
+    testable claim* — and the fix is to say descoped rather than to invent the files.
+40. **D3's null was not measured on the common window, and §17.2 does not say so.**
+    `basis_carry_comparison.csv` runs **2007-05 → 2024-09, 4,545 days** on the 7-name onshore-fixing
+    universe — not the 5,001-day common window — and the carry **anchor** on that universe is itself
+    **negative** (net Sharpe −0.3172, against the shared baseline's +0.4659). Window, universe and
+    anchor all differ from the shared base, so "tested on the shared base" is not what the file
+    shows. **The null stands** — a signal that cannot beat a *negative* anchor is not rescued by a
+    better one, and the basis book scores −0.1256 — but the qualification belongs beside the result.
+    Added to `report/09_what_did_not_work.md` §9.2 and to the D3 row of the component verdict table.
+    Two smaller instances of the same shape, both recorded where they are read rather than here:
+    `regime_series.csv` starts **2008-06-11**, so Stage 6's conditional table covers 4,702 days
+    against the base's 5,001 and cannot see the pre-crisis era or the first nine months of GFC 2008;
+    and `_tail_score` compares window statistics without checking that a component was *live* across
+    the window, which is why Vidhi's gate — 173 months from 2012-02 — is credited a `euro_2011` win
+    on a window that is only about half covered.
+41. **`build_deck.py` cannot be re-run without dirtying a committed artifact, for reasons that have
+    nothing to do with content.** Re-running all four modules on 2026-08-11 to confirm they still
+    work end to end left **59 of 59 CSVs byte-identical** — the evidence layer is genuinely
+    reproducible — and rewrote `presentations/deck_2026_08_05.html` with a **904-line diff**. Every
+    one of those lines is a matplotlib SVG element ID (`f1-p06a4400b32` → `f1-pa80a574bd7`), which
+    matplotlib generates randomly per run. Normalising the IDs makes the two files identical; the
+    length is unchanged to the byte and all **13,871** numeric tokens match. The regenerated file was
+    therefore discarded and the committed one kept, per the trade #33/#35 already made twice: do not
+    churn a frozen deliverable for a non-difference. *The practical rule for anyone re-running the
+    module: a dirty `deck_2026_08_05.html` is not evidence of anything until you have normalised the
+    element IDs, and a **clean** one would actually be the surprise.*
