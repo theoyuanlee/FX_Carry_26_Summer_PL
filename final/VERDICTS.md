@@ -29,16 +29,16 @@ the reason the two adoptions are worth anything.
 | **Vidhi** | Macro/regime probability gate | `exposure` | **REJECTED** |
 | **Oleg** | *(no component submitted)* | — | **NEVER TESTED** |
 | Cesare | Tail-event forecast (P4-B, the desk's central ask) | `exposure` | **REJECTED — null** |
-| Cesare | D1 — crash-risk-premium-adjusted carry | signal | **NULL** |
-| Cesare | D3 — cross-currency basis / dollar funding | signal + conditioner | **NULL** |
-| Cesare | D6 — forward term structure | tenor | **NULL** |
+| Cesare | D1 — crash-risk-premium-adjusted carry | signal | **NULL RESULT** |
+| Cesare | D3 — cross-currency basis / dollar funding | signal + conditioner | **NULL RESULT** |
+| Cesare | D6 — forward term structure | tenor | **NULL RESULT** |
 | Cesare | D2 — FX volatility risk premium | not attached | **POSITIVE, EXCLUDED** |
 | Cesare | Stage 3 — exposure timing | `exposure` | **REJECTED** |
 | Cesare | Stage 4 — within-leg weighting | weighting | **REJECTED** |
 | Cesare | Stage 5 — momentum overlay | signal / filter | **REJECTED** |
 | Cesare | Stage 6 — regime-timed de-risking | `exposure` | **REJECTED** |
 
-**Two adopted. One contested rejection. Two named gaps. Eleven nulls and rejections.**
+**Sixteen components: two adopted · ten rejections and nulls, one of them contested · two named gaps · one blocked on data · one positive result deliberately excluded.**
 
 ### The bars, fixed before any of it was measured
 

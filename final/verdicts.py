@@ -138,10 +138,13 @@ def build() -> pd.DataFrame:
     t = _standalone("Bad-skew exclusion (XS top quintile)")
     t_add = _ladder("final", "skew_excl")
     sel = _csv("p4_selection_vs_derisking.csv").set_index("book")
-    dd_total = (float(sel.loc["baseline", "max_drawdown"])
-                - float(sel.loc["bad-skew exclusion", "max_drawdown"])) * 100
-    dd_derisk = (float(sel.loc["baseline", "max_drawdown"])
-                 - float(sel.loc["gross-matched de-risk (control)", "max_drawdown"])) * 100
+    # Drawdowns are negative, so an IMPROVEMENT is variant minus baseline (less
+    # negative = shallower). Subtracting the other way round reports a 7.3pp
+    # improvement as "-7.3pp", which reads as a worsening.
+    dd_total = (float(sel.loc["bad-skew exclusion", "max_drawdown"])
+                - float(sel.loc["baseline", "max_drawdown"])) * 100
+    dd_derisk = (float(sel.loc["gross-matched de-risk (control)", "max_drawdown"])
+                 - float(sel.loc["baseline", "max_drawdown"])) * 100
     add(owner="Theo", component="Bad-skew exclusion (XS top quintile)",
         hook="weight_overlay", bar=BAR_SLOT + f"; measured against {BAR_RR}",
         measurement=(f"standalone net {_f(t['net_sharpe'])} vs bar "
@@ -158,7 +161,15 @@ def build() -> pd.DataFrame:
                 f"{float(sel.loc['baseline','alpha_selection_ann'])*100:.2f}%/yr at "
                 f"t={float(sel.loc['baseline','t_alpha_selection']):.2f} — insignificant. "
                 f"What selection DOES buy is skew, "
-                f"{_f(sel.loc['baseline','skew'],2)} -> {_f(sel.loc['bad-skew exclusion','skew'],2)}, "
+                # CONTROL -> filter, not baseline -> filter. The control holds
+                # de-risking constant, so this pair isolates selection; quoting
+                # against the baseline would credit selection with a skew change
+                # that is partly de-risking, which is the error the control exists
+                # to prevent.
+                f"{_f(sel.loc['gross-matched de-risk (control)','skew'],2)} -> "
+                f"{_f(sel.loc['bad-skew exclusion','skew'],2)} against the "
+                f"gross-matched control (baseline itself is "
+                f"{_f(sel.loc['baseline','skew'],2)}), "
                 "which de-risking does not deliver at all. The combined book also "
                 "runs at 8.8% vol, not 10%, so part of its MaxDD is a lower risk level"))
 
@@ -279,7 +290,7 @@ def build() -> pd.DataFrame:
         measurement=(f"best skew variant net "
                      f"{_f(max(float(d1.loc[i,'sharpe']) for i in d1.index if i.endswith('_net') and 'carry' not in i))} "
                      f"vs matched carry {_f(d1.loc['U21_carry_net','sharpe'])} on the 21-name panel"),
-        verdict="NULL",
+        verdict="NULL RESULT",
         reconstruction="built here; rerun 2026-08-04 on model-free BKM skewness — null survives",
         evidence="skew_carry_comparison.csv; srp_carry_spanning.csv; p3_d1_bkm_comparison.csv; p3_d1_bkm_spanning.csv",
         caveat=("Li-Sarno-Zinna's single-source claim that the skewness risk premium "
@@ -292,7 +303,7 @@ def build() -> pd.DataFrame:
         hook="signal + conditioner", bar=BAR_BASELINE,
         measurement=(f"basis book net {_f(d3.loc['U7_basis_net','sharpe'])} vs matched "
                      f"carry {_f(d3.loc['U7_carry_net','sharpe'])} on the 7-name universe"),
-        verdict="NULL",
+        verdict="NULL RESULT",
         reconstruction="built here",
         evidence="basis_carry_comparison.csv; basis_carry_spanning.csv",
         caveat=(f"NOT ON THE COMMON WINDOW. This battery runs "
@@ -308,7 +319,7 @@ def build() -> pd.DataFrame:
     add(owner="Cesare", component="D6 — forward term structure (1M/3M/6M/12M)",
         hook="tenor", bar=BAR_BASELINE,
         measurement="; ".join(f"{t} net {_f(ten.loc[t,'net_sharpe'])}" for t in ten.index),
-        verdict="NULL",
+        verdict="NULL RESULT",
         reconstruction="built here; net figures re-priced on base v1.1.0 after the roll-cost fix",
         evidence="tenor_sweep.csv",
         caveat=("§17's claim that this 'needs multi-tenor forwards (only 1M pulled)' was "

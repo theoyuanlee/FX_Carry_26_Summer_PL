@@ -2430,3 +2430,36 @@ all verified by execution.*
     churn a frozen deliverable for a non-difference. *The practical rule for anyone re-running the
     module: a dirty `deck_2026_08_05.html` is not evidence of anything until you have normalised the
     element IDs, and a **clean** one would actually be the surprise.*
+
+*Corrections 42–44 added 2026-08-12 while building the Aug 12 deck; all verified by execution.*
+
+42. **The verdict literally named "NULL" became a null value, in the table built to prove nothing was
+    filtered out.** `component_verdicts.csv` recorded D1, D3 and D6 as `NULL` — and `NULL` is in
+    pandas' default `STR_NA_VALUES`, so `pd.read_csv` converted all three to `NaN`. A plain
+    `groupby("verdict")` returned **13 of 16 rows and raised nothing**. The file was correct on disk
+    (checked with the `csv` module); the loss happened at read time, silently, and the three rows
+    that disappeared are the three Phase-3 nulls this document calls its most defensible work.
+    **Same class as #13** — *a silent empty is worse than a raise* — and the same lesson one layer
+    up: the failure was not in the analysis or in the file but in the round trip between them. Fixed
+    by emitting **`NULL RESULT`**, which is not an NA sentinel; `final/VERDICTS.md`'s three labels
+    follow, and `cesare/build_deck_aug12.py` reads with `keep_default_na=False` so it is robust to
+    the class rather than to this instance. Changing the string was right here where #33 and #35
+    declined to change a committed artifact, because this is not a documentation defect: the file
+    could not be read correctly by its intended consumer.
+43. **`verdicts.py` reported a drawdown *improvement* with the sign of a worsening.** It computed
+    `baseline − variant` on `max_drawdown`, which is negative for an improvement because drawdowns
+    are negative: the committed caveat read *"of the **−7.3pp** drawdown improvement, **−6.8pp** is
+    holding less notional"*. The magnitudes were right and every prose rendering of them (§19.4,
+    `report/`, `VERDICTS.md`) quoted the correct **+7.3 / +6.8 / +0.5**, so no published conclusion
+    moved — but the machine-readable file disagreed in sign with every human-readable one, and the
+    machine-readable file is the one readers are told to trust. Fixed to `variant − baseline`.
+44. **The same caveat quoted the skew improvement against the wrong reference, undoing the control it
+    was citing.** It read *"what selection DOES buy is skew, **−0.65** → −0.31"* — baseline →
+    filter. The documented figure is **−0.63 → −0.31**, which is **control → filter**, and the
+    difference is the entire point of guardrail §6.12: the gross-matched control exists to hold
+    de-risking constant so that what remains is selection. Quoting against the baseline credits
+    *selection* with a skew change that is partly de-risking — the precise error the control was
+    built to prevent, committed in the sentence explaining the control. Fixed to control → filter,
+    with the baseline figure kept beside it so both are visible. *Two sign-and-reference errors in
+    one generated cell, in a file whose design principle is that pulled numbers beat typed ones:
+    pulling a number does not help if you pull it from the wrong pair.*
