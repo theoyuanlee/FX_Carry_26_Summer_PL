@@ -48,6 +48,15 @@ TARGETS = {
                  "max_drawdown": -0.1907, "CVaR_99": 0.0200, "turnover": 0.5902},
     "COMBINED_TAIL": {"gross_sharpe": 0.6808, "net_sharpe": 0.5323,
                       "max_drawdown": -0.1907, "CVaR_99": 0.0189, "turnover": 0.6051},
+    # The delivered menu. CORE and DEFENSIVE are aliases, so they are asserted
+    # against the SAME numbers as the books they alias -- that identity is the
+    # point of checking them here rather than trusting the alias.
+    "OFFENSIVE": {"gross_sharpe": 0.6217, "net_sharpe": 0.4606,
+                  "max_drawdown": -0.4124, "CVaR_99": 0.0430, "turnover": 0.9785},
+    "CORE": {"gross_sharpe": 0.6331, "net_sharpe": 0.4891,
+             "max_drawdown": -0.1907, "CVaR_99": 0.0200, "turnover": 0.5902},
+    "DEFENSIVE": {"gross_sharpe": 0.6808, "net_sharpe": 0.5323,
+                  "max_drawdown": -0.1907, "CVaR_99": 0.0189, "turnover": 0.6051},
 }
 
 LABELS = {
@@ -55,6 +64,9 @@ LABELS = {
     "G10": 'run("G10")       9 currencies',
     "COMBINED": 'run("COMBINED")  THE STRATEGY — baseline + duration hedge + bad-skew exclusion',
     "COMBINED_TAIL": 'run("COMBINED_TAIL")  NOT SHIPPED — the documented alternative (+ VIX gate)',
+    "OFFENSIVE": 'run("OFFENSIVE")  MENU — no overlays, 15% vol target; calm-macro mandate',
+    "CORE": 'run("CORE")       MENU — the shipped book under its menu name (== COMBINED)',
+    "DEFENSIVE": 'run("DEFENSIVE")  MENU — stress mandate (== COMBINED_TAIL)',
 }
 
 TOL = 5e-4

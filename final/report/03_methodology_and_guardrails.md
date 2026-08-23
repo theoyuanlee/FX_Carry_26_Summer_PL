@@ -121,7 +121,7 @@ Internal identities hold to `0.0e+00`: per-currency contributions sum to gross, 
 components equal excess returns, and net equals gross minus cost. Both hooks are exact no-ops at
 neutral settings, so an extension measures only its own effect.
 
-**48 tests** across four suites guard this, and they are run before and after any change.
+**51 tests** across four suites guard this, and they are run before and after any change.
 In this package they are `final/tests/`, where `test_combined.py` carries one extra assertion
 (the `COMBINED_TAIL` alternative, which only exists here), and two further suites check the
 package itself — `test_standalone.py` 5/5 and `test_vendor_drift.py` 4/4:
@@ -130,7 +130,7 @@ package itself — `test_standalone.py` 5/5 and `test_vendor_drift.py` 4/4:
 python tests/test_reconciliation.py    # 12/12 — reconciliation, identities, hook no-ops
 python tests/test_episodes.py          # 11/11 — frozen windows, leg split, the two v1.1.0 fixes
 python tests/test_overlays.py          # 17/17 — composition, gross-non-increasing, ExternalLeg
-python tests/test_combined.py          #   9/9 — the COMBINED preset (+ COMBINED_TAIL here)
+python tests/test_combined.py          #  12/12 — the preset, COMBINED_TAIL, and the menu
 ```
 
 ---
@@ -179,7 +179,7 @@ Sharpe and one uncomfortable table, and both are reported.
 
 ## 3.6 What this chapter establishes
 
-The methodology is not novel and is not meant to be. What it is, is *enforced*: 48 tests, frozen
+The methodology is not novel and is not meant to be. What it is, is *enforced*: 51 tests, frozen
 windows, guardrails in code rather than in memory, and a written record of the four occasions on
 which a plausible-looking number turned out to be wrong. Every result in chapters 4 through 9 was
 produced under these constraints, and the ones that are nulls are nulls under them too.

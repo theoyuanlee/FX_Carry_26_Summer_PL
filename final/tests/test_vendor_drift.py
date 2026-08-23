@@ -193,7 +193,9 @@ def test_every_vendored_file_is_accounted_for():
                 "requirements.txt", "tests/test_standalone.py",
                 "tests/test_vendor_drift.py", "inputs/PROVENANCE.md",
                 "data/raw/PROVENANCE.md", "evidence/README.md",
-                "evidence/component_verdicts.csv"}
+                "evidence/component_verdicts.csv", "menu.py",
+                "evidence/strategy_menu.csv",
+                "evidence/strategy_menu_by_window.csv"}
 
     unaccounted = []
     for path in sorted(PACKAGE_ROOT.rglob("*")):

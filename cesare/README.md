@@ -65,7 +65,7 @@ cesare/
 2. **`combined_engine.py` is imported by the shared base.** `strategy/config.py:252` does
    `from cesare.combined_engine import combined_components` and
    `strategy/tests/test_combined.py:117` imports `ADOPTED`. Renaming or moving it breaks
-   `run("COMBINED")` and the 8/8 suite. `cesare/` works as an implicit namespace package — there is
+   `run("COMBINED")` and the 11/11 suite. `cesare/` works as an implicit namespace package — there is
    no `__init__.py` and there does not need to be. The reasoning is in the `combined_preset`
    docstring in [`../strategy/config.py`](../strategy/config.py); read it first.
 

@@ -27,6 +27,8 @@ the reason the two adoptions are worth anything.
 | **Dafu** | VIX percentile gate (p80 / 756d) | `exposure` | **REJECTED** — contested, see below |
 | **Dafu** | Option insurance overlay | `weight_overlay` proxy | **BLOCKED ON DATA** |
 | **Vidhi** | Macro/regime probability gate | `exposure` | **REJECTED** |
+| **Arjun** | EM relative-vol deleveraging (2026-08-12) | `exposure` proposed | **NOT EVALUABLE AS QUOTED** |
+| **Theo** | Macro/option optimisation layer (2026-08-14) | never attached | **NOT EVALUABLE AS COMMITTED** |
 | **Oleg** | *(no component submitted)* | — | **NEVER TESTED** |
 | Cesare | Tail-event forecast (P4-B, the desk's central ask) | `exposure` | **REJECTED — null** |
 | Cesare | D1 — crash-risk-premium-adjusted carry | signal | **NULL RESULT** |
@@ -38,7 +40,9 @@ the reason the two adoptions are worth anything.
 | Cesare | Stage 5 — momentum overlay | signal / filter | **REJECTED** |
 | Cesare | Stage 6 — regime-timed de-risking | `exposure` | **REJECTED** |
 
-**Sixteen components: two adopted · ten rejections and nulls, one of them contested · two named gaps · one blocked on data · one positive result deliberately excluded.**
+**Eighteen components: two adopted · ten rejections and nulls, one of them contested · four named gaps · one blocked on data · one positive result deliberately excluded.**
+
+Two of those rows arrived **after** the 2026-08-07 scope freeze and after this package was built on 2026-08-12. They are here because the instruction on 2026-08-12 was to collect and check the final work centrally, and a component that arrives late is still a component. Neither is folded into any book, and the reason in each case is a measurement problem rather than a judgement about the idea.
 
 ### The bars, fixed before any of it was measured
 
@@ -178,7 +182,7 @@ to a committed ladder rung that has been in the evidence since Phase 4.
 
 ---
 
-## The two named gaps
+## The four named gaps
 
 A gap stated in the artifact is a gap. A gap omitted from it is a claim.
 
@@ -203,22 +207,62 @@ Commit `ec535c6` (2026-08-05) landed after the Phase-4 evaluation ran, adding
 `07_option_conditioned_carry_strategy.ipynb` at the repo root and
 `theo/06_options_filter_regression(9).ipynb`. Six files, all notebooks and one PDF — **no data**.
 
-Notebook 07 is committed **unexecuted**: 14 code cells, 0 execution counts, 0 stored outputs. Its
-declared input `option_filter_regression_panel_primary_v9.parquet` exists nowhere on disk or in
-git — `find`, `git ls-files` and the notebook's own fallback glob all come back empty — so cell 3
-raises `FileNotFoundError` before anything computes. Notebook 06 *is* fully executed (20/20) but
-writes 16 `_v9` parquets and 2 JSON files, none of which are committed.
+> **Corrected 2026-08-19.** Until today this section said notebook 07 was committed *unexecuted* —
+> 14 code cells, 0 execution counts, 0 stored outputs. That was true of commit `ec535c6` and is
+> **false of what is in the repo now**: commit `6bd8ef2` (2026-08-14) replaced it with a fully
+> executed copy, 24/24 code cells with 21 carrying stored outputs. The correction is recorded rather
+> than quietly applied, because this is the one document whose entire claim is that everything in it
+> was checked, and a checkable error here costs more than the fact it got wrong.
 
-It is a specification, not a result. There is no return series to fold into the ladder, and
-inventing one by re-running someone else's notebook and calling the output theirs would be worse
-than recording the gap.
+The blocker survives the correction unchanged. Its declared input
+`option_filter_regression_panel_primary_v9.parquet` exists nowhere on disk or in git — `find`,
+`git ls-files` and the notebook's own fallback glob all come back empty — and neither do the eleven
+parquets notebook 07 writes. Theo's twelve committed parquets are all from his July work.
 
-**To close it:** run `theo/06_options_filter_regression(9).ipynb` and commit the `_v9` panel;
-notebook 07 then produces a return series that re-prices through the same `weight_overlay` path as
-everything else.
+So what changed is the *kind* of gap. This is no longer a specification with no result; it is a
+result that cannot be reproduced or re-priced here. That is a weaker gap and a more awkward one,
+because there are now numbers to look at, and they need their basis stated before anyone quotes
+them: **notebook 07's best variants reach Sharpe 0.49 against his own baseline of 0.44** — 20
+currencies, monthly, a flat 5 bp cost — not against the shared base's 0.4659 on 27 currencies daily
+with real per-currency bid/ask. A +0.05 improvement measured on a different book is not comparable
+to this one. That is the same issue the desk saw on 2026-07-29, and it is exactly what the shared
+base exists to prevent.
+
+**To close it:** commit the `_v9` panel; notebook 07 then produces a return series that re-prices
+through the same `weight_overlay` path as everything else.
 
 **His adopted overlay is unaffected.** It keys off `fx_option_signal_panel.parquet`, committed
-2026-07-18 in commit `9d2ec5e` and unchanged since. The August commit touched no data.
+2026-07-18 in commit `9d2ec5e` and unchanged since. The August commits touched no data.
+
+### Arjun's EM deleveraging — not evaluable as quoted
+
+Commit `6e8df1b` (2026-08-12) added `arjun/em_deleveraging.ipynb` and
+`arjun/outputs/em_deleveraging_compare.csv`. It is the most interesting late arrival in the repo:
+a relative-volatility rule that deleverages the EM sleeve, reported at gross Sharpe 0.6284 → 0.6768
+with a Newey–West **t of 3.43**, the largest t on any teammate result in this project, and it beats
+his own whole-book de-risk control (0.5715).
+
+**The comparison as written does not stand, and the check that found it is the point.** The first
+two rows of that CSV are the *same book on two cost bases*, presented as two different books:
+
+| Row as labelled | Sharpe | Ann. return | Ann. vol | What it actually is |
+|---|---|---|---|---|
+| `unhedged book (ALL_net)` | 0.4659 | 5.21% | 11.19% | this project's committed **net** baseline |
+| `reconstructed book (G10+EM sleeves)` | 0.6284 | 7.03% | 11.18% | its committed **gross** baseline |
+
+The 1.81%/yr booked between them as `deviation_carry_%yr` is *precisely* the committed cost drag
+`0.018147`, and the `t` of 14.26 on that row is that drag rather than a result. Drawdowns in the file
+also use the cumsum convention (−0.2977) rather than the wealth-curve convention the base reports
+(−0.2932) — the same gap already recorded for his duration hedge in plan Appendix C #22–24.
+
+So the rule's honest increment is **+0.048 gross Sharpe**, not 0.4659 → 0.6768.
+
+**Why it is not folded in.** Two things have to happen first, and neither is a criticism of the idea.
+It is measured **uncosted**, while being a rule that adds turnover by construction — so the net
+number is the one that decides, and it does not exist yet. And it does **not improve MaxDD at all**
+(−0.2977 before and after), so it would have to clear criterion (i) of the slot rule on CVaR₉₉,
+per window. Nobody gets into this book on a t-statistic alone; that rule is what makes the two
+adoptions worth anything.
 
 ---
 

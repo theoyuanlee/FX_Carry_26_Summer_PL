@@ -59,7 +59,61 @@ Those are different products, and only the second is a skill claim.
 
 ---
 
-## 11.2 Recommendations
+## 11.2 The delivered menu — pick a rung, not a strategy
+
+The project ships **one engine at three points on a risk-appetite ladder**, so the allocation
+decision is a mandate choice rather than an acceptance of somebody else's default. All three are
+named presets of the same construction and are reproduced by one command.
+
+| Book | When it is the right mandate | Return | Vol | Sharpe | Sortino | Calmar | MaxDD | CVaR₉₉ |
+|---|---|---|---|---|---|---|---|---|
+| `OFFENSIVE` | calm macro, risk-on, drawdown budget available | **7.64%** | 16.59% | 0.4606 | 0.627 | 0.157 | **−41.24%** | 0.0430 |
+| *baseline — reference* | *not a mandate; the comparison line* | *5.21%* | *11.19%* | *0.4659* | *0.634* | *0.160* | *−29.32%* | *0.0292* |
+| `CORE` | default / all-weather | 4.33% | 8.85% | 0.4891 | 0.694 | 0.211 | −19.07% | 0.0200 |
+| `DEFENSIVE` | the desk judges the regime to be stressed | 4.43% | 8.32% | **0.5323** | **0.760** | **0.219** | −19.07% | **0.0189** |
+
+**Every risk-adjusted ratio improves monotonically down the ladder while return moves monotonically
+the other way**, and that ordering holds in all eight frozen stress windows, not just in aggregate.
+Through COVID the offensive book loses 28.2% and the defensive book 2.8%; through the 2022 rates
+selloff the offensive book makes +40.2% and the defensive book +5.0%. That is the entire trade-off,
+and it is visible in both directions rather than only where protection flatters.
+
+Three things this menu does **not** claim, each of which the evidence in this report forbids:
+
+- **`OFFENSIVE` is a leverage dial, not an edge.** Its net Sharpe of 0.4606 is the baseline's 0.4659
+  within noise, by construction. The 15% target is the top of a plateau rather than an argmax — across
+  targets of 10/12/13/15/18% the Sharpe runs 0.4659 / 0.4656 / 0.4645 / 0.4606 / 0.4430, flat until
+  the leverage cap begins truncating the highest-volatility days. What it buys is quantity, and the
+  −41% drawdown is what quantity costs.
+- **`DEFENSIVE` is not promoted despite having the better ratios.** It is better than `CORE` on
+  Sharpe, Sortino, Calmar and CVaR₉₉, and it is still not the default, because the gate it adds failed
+  the slot rule fixed before any component was measured. That decision costs 0.043 of net Sharpe and
+  it is paid rather than re-argued after the fact (ch. 7, §7.6). It is offered as a named mandate so
+  the cost can be priced by whoever disagrees.
+- **No rule is offered for switching between the rungs.** Nine timing overlays were tested and none
+  paid (ch. 9). A switching signal is precisely the thing this report's own evidence says not to
+  claim, so choosing a rung is a judgement the desk makes, not a forecast the book supplies.
+
+### At matched risk
+
+Comparing `CORE` with the baseline on return compares two different risk levels — `CORE` runs at
+8.85% volatility against 11.19%. Levered onto matched risk:
+
+| At matched risk | Return | Vol | Sharpe | MaxDD | CVaR₉₉ | Skew |
+|---|---|---|---|---|---|---|
+| baseline | 5.21% | 11.19% | 0.4659 | −29.32% | 0.0292 | −0.65 |
+| **`CORE` levered** | **5.33%** | 11.08% | **0.4813** | **−23.87%** | **0.0253** | **−0.30** |
+
+Same risk, **more return, a 5.4pp shallower drawdown, 13% less CVaR₉₉ and less than half the negative
+skew**. This supersedes the concessive reading — *better per unit of risk, worse per dollar deployed* —
+carried in earlier material: that was an artifact of comparing at unmatched risk, not a property of
+the book. The leverage is a mandate parameter chosen with the whole sample in view, which is
+legitimate for a like-for-like comparison and is not offered as a trading rule.
+
+*Source: `../evidence/strategy_menu.csv`, `../evidence/strategy_menu_by_window.csv`,
+`../evidence/strategy_menu_matched_risk.csv`, built by `../menu.py`.*
+
+## 11.3 Recommendations
 
 **For an allocation decision**
 
@@ -115,7 +169,7 @@ Those are different products, and only the second is a skill claim.
 
 ---
 
-## 11.3 What we would want challenged
+## 11.4 What we would want challenged
 
 Stated deliberately, because a report that only lists its strengths is not useful.
 
@@ -125,16 +179,19 @@ Stated deliberately, because a report that only lists its strengths is not usefu
 - **The recent-period concentration.** 53% of cumulative P&L comes from the last two and a half years.
   We cannot tell whether that is a feature of the current environment or a warning about the
   whole-sample numbers.
-- **The unmatched risk comparison.** `COMBINED` runs at 8.8% volatility against the baseline's 11.2%
-  and ends at 2.18× against 2.48×. We have not levered it back to a matched risk level. Until we do,
-  it is a risk-reduction result, not a return-improvement one.
+- ~~**The unmatched risk comparison.**~~ **Closed — see §11.2.** This bullet used to say we had not
+  levered `COMBINED` back to a matched risk level and that until we did, it was a risk-reduction
+  result rather than a return-improvement one. It has now been run: at matched risk the book returns
+  5.33%/yr against the baseline's 5.21% at a −23.87% drawdown against −29.32%. The challenge was
+  fair, it was the right thing to have flagged against ourselves, and the answer went the other way
+  from the one we conceded.
 - **Whether nine nulls means "carry cannot be improved" or "we did not find the improvement."** We
   have argued the former from the risk-premium logic. The latter remains possible, and this project is
   underpowered to distinguish them for small effects.
 
 ---
 
-## 11.4 The through-line
+## 11.5 The through-line
 
 The project set out to find a way to improve FX carry through dynamic exposure management. It did not
 find one, and it now understands why: **the premium and the crash risk are the same thing, so you
@@ -147,6 +204,6 @@ the right names, and the honest accounting separates those two. And in the same 
 failed to improve the carry sort, there is a *different* premium that behaves unlike anything else we
 tested, which we can measure and cannot yet trade.
 
-Six workstreams now report on one baseline, with frozen windows, pre-registered bars and 48 tests. The
+Six workstreams now report on one baseline, with frozen windows, pre-registered bars and 51 tests. The
 next disagreement will be about ideas rather than about conventions, which is the outcome that will
 outlast any number in this report.

@@ -2,7 +2,7 @@
 
 *Author: Cesare Bavaresco · UChicago Summer Project Lab with Bank of America (Corporate Treasury / Global Funding).*
 *Data: daily Bloomberg, 2007-01 → 2026-06, G10 + EM currencies vs USD.*
-*Last updated: **2026-08-11** — the evaluation closed (the VIX-gate verdict re-argued, Oleg and
+*Last updated: **2026-08-19** — the delivered menu (§21): three named books on one risk-appetite ladder, the Aug 5 matched-risk question closed, and the two post-freeze teammate pushes collected, checked and verdicted (§21.1). Previously **2026-08-11** — the evaluation closed (the VIX-gate verdict re-argued, Oleg and
 Theo's August work recorded as named gaps, one component-verdict table covering all six
 workstreams) and the `final/` hand-off package built (§20). Previously 2026-08-04, which predated
 the §14.6 cleanup of 2026-08-05.*
@@ -167,12 +167,13 @@ Stage dashboard:
 | 6. Regime analysis | ✅ | `cesare/regime_analysis.ipynb`; `fx_utils.regime_classify` | `regime_series.csv`, `stage6_regime_stats.csv`, `stage6_conditional_by_regime.csv` |
 | 7. ML extension (optional) | ⬜ | descoped — survives only as the P4-B tail classifier (§19.3) | — |
 | Phase 3 — novel edge (§17) | ✅ closed | D1 skew **null** (**rerun 2026-08-04 on model-free BKM — null survives**), D3 basis **null**, D6 term structure **null**; **D2 vol risk premium ✅ the one non-null, heavily qualified (§17.4)**; D4/D5 cut (§17.3) | `skew_carry_comparison.csv`, `basis_carry_comparison.csv`, `tenor_sweep.csv`, `p3_d1_bkm_*.csv` (5), `p3_d2_*.csv` (8), spanning CSVs |
-| **Team base strategy (§18)** | ✅ **v1.2.0** | `strategy/` (repo root) | `strategy/{config,core,fx_utils,episodes,overlays}.py`, README, 5 examples, **12 + 11 + 17 + 8 = 48** acceptance tests |
+| **Team base strategy (§18)** | ✅ **v1.2.0** | `strategy/` (repo root) | `strategy/{config,core,fx_utils,episodes,overlays}.py`, README, 5 examples, **12 + 11 + 17 + 11 = 51** acceptance tests (test_combined gained the three menu tests, §21) |
 | **P4-A stress-window standard (§19.2)** | ✅ **done 2026-08-03 (W1)** | `strategy/episodes.py`, `cesare/final_evaluation.py` | `p4_episode_table_baseline.csv`, `p4_stress_table_baseline.csv`, `p4_leg_decomposition.csv`, `p4_reverdict_tail_objective.csv`, `final_comparison.csv`, `tenor_sweep.csv` |
 | **P4-B tail-event forecast (§19.3)** | ✅ **done 2026-08-03 (W3) — NULL** | `cesare/tail_forecast.py` | `p4_tail_forecast_eval.csv`, `p4_tail_overlay_stats.csv`, `p4_tail_overlay_by_episode.csv`, `p4_tail_feature_importance.csv` |
 | **P4-C combined engine (§19.4)** | ✅ **done 2026-08-03 (W2–W3)** | `strategy/overlays.py` + `COMBINED` preset, `cesare/combined_engine.py` | `p4_component_standalone.csv`, `p4_component_by_episode.csv`, `p4_combined_ladder.csv`, `p4_combined_by_episode.csv`, `p4_selection_vs_derisking.csv` |
 | **P4-D delivery (§19.5, §14.2/14.3)** | ✅ **done 2026-08-04 (W4)** | `report/` | `final_comparison.csv` ✅ (**232 rows**, 0 duplicate keys); `final_comparison_by_episode.csv` ✅ (**652 rows**, 38 variants, 6 gaps recorded in-file); **all 11 report chapters** ✅ |
 | Final evaluation & report | ✅ **done 2026-08-04** | §14.1 metrics ✅; repo hygiene ✅ (cesare/, §14.4); §14.2 **both** tables ✅; §14.3 **all 11 chapters written** ✅; §14.5 collation ✅ (done 2026-08-04 — the header said so, this cell did not) | `final_comparison{,_by_episode}.csv`; `report/01..11_*.md` |
+| **Delivered menu (§21)** | ✅ **2026-08-19** | `strategy/config.py`, `final/{strategy/config.py,menu.py}` | `OFFENSIVE`/`CORE`/`DEFENSIVE` on one risk ladder; `strategy_menu{,_by_window,_matched_risk}.csv`; deck_2026_08_19 |
 | **Hand-off package (§20)** | ✅ **built 2026-08-11** | `final/` | the engine, the adopted components, every runtime input vendored, 60 evidence CSVs, 6 test suites, the report; `final/reproduce.py` |
 
 **Base adoption (§18):** Dafu ✅ · Arjun ⬜ · Theo ⬜ · Vidhi ⬜ · Oleg ⬜. Deadline: the
@@ -1980,7 +1981,11 @@ the other folders can be deleted without it noticing.
    beat 0 MB and a trick, for an artifact whose whole job is to be trusted by a stranger.
 2. **The `strategy → cesare` seam was fixed inside `final/` only.** `strategy/config.py:252` and
    `strategy/tests/test_combined.py:117` in the shared repo are **untouched**, so the 48 tests and
-   every teammate import keep working exactly as before. The dependency points the right way round
+   every teammate import keep working exactly as before. *(Superseded 2026-08-19 by §21, which adds
+   the menu presets and `combined_tail_preset` to **both** copies. That is the opposite move and it
+   is the right one: adding to both converged the two files — the declared vendor diff fell from 75
+   changed lines to 37 — where adding to one only would have widened the fork this decision was
+   trying to avoid.)* The dependency points the right way round
    inside the package that ships, and the multi-person repo is left alone until it is retired
    deliberately.
 3. **No notebooks.** They are 3.7 MB and 928 KB with embedded figures, and they are the historical
@@ -2002,6 +2007,117 @@ its source, declares the six patched lines and fails on any undeclared differenc
 **Nothing about the strategy changed.** `ADOPTED` is still `("duration", "skew_excl")`, every
 acceptance number is unmoved, and `COMBINED_TAIL` is additive — a name for a ladder rung that has
 been in `p4_combined_ladder.csv` since Phase 4.
+
+---
+
+## 21. The delivered menu — one engine, three books ✅ (2026-08-19)
+
+**Why.** The Aug 12 meeting left one substantive question open — one strategy or several — and set
+the desk's condition for answering it: every strategy presented must come with its pros and cons,
+and the count stays small (one to three, five at the outside). §20 delivered a package that
+reproduces one book. It did not deliver a *choice*, and a choice is what the final presentation is
+being asked to make.
+
+**What was built.** Three named presets, in `strategy/config.py` **and** `final/strategy/config.py`,
+plus `final/menu.py` and the Aug 19 deck. Nothing about the research changed and no committed number
+moved — the Aug 7 freeze holds. Measured 2026-08-19, net of costs, common window:
+
+| Book | Config | Return | Vol | Sharpe | Sortino | Calmar | MaxDD | CVaR₉₉ |
+|---|---|---|---|---|---|---|---|---|
+| `OFFENSIVE` | baseline, no overlays, `vol_target=0.15` | **7.64%** | 16.59% | 0.4606 | 0.627 | 0.157 | **−41.24%** | 0.0430 |
+| *`ALL` reference* | *the shared baseline* | *5.21%* | *11.19%* | *0.4659* | *0.634* | *0.160* | *−29.32%* | *0.0292* |
+| `CORE` | = `COMBINED` | 4.33% | 8.85% | 0.4891 | 0.694 | 0.211 | −19.07% | 0.0200 |
+| `DEFENSIVE` | = `COMBINED_TAIL` | 4.43% | 8.32% | **0.5323** | **0.760** | **0.219** | −19.07% | **0.0189** |
+
+**Every risk-adjusted ratio improves monotonically down the ladder while return moves monotonically
+the other way**, and the same monotonicity holds in all eight frozen stress windows. That is the
+deliverable's central claim and `test_menu_is_a_monotone_ladder` asserts it rather than trusting it.
+
+**Four decisions worth recording.**
+
+1. **A ladder, not three strategies.** Three unrelated strategies invite the question the project
+   cannot answer — which one is right. One book at three risk levels invites the question it can:
+   how much protection do you want to pay for. Every window table then reads as a single trade-off
+   rather than as a horse race.
+2. **`CORE` and `DEFENSIVE` are aliases, not re-definitions**, asserted bit-identical at 0.0e+00.
+   A second definition of a shipped book is a second thing that can drift from the ladder it is
+   meant to reproduce.
+3. **`OFFENSIVE` is a leverage knob, and is labelled as one.** 15% is the top of a *plateau*, not an
+   argmax: across targets 10/12/13/15/18% the net Sharpe runs 0.4659 / 0.4656 / 0.4645 / 0.4606 /
+   0.4430 — flat to 15%, then it breaks as `lev_cap` truncates the highest-vol days (0% of days at
+   the cap at 10%, 6.9% at 15%, 17.5% at 18%). Its Sharpe equals the baseline's *by construction*,
+   so no edge is claimed; `test_offensive_is_a_risk_dial_not_an_edge` fails if it ever starts
+   beating the baseline risk-adjusted, because that would make the written description wrong.
+4. **No switching rule, deliberately.** Every exposure-timing rule tested in this project came back
+   null (§9, §12, §19.3). A rule for moving between the rungs is precisely the thing the evidence
+   says not to claim, so choosing a rung is a mandate decision, not a signal.
+
+**⚑ The Aug 5 matched-risk question, closed — and the earlier answer was wrong.** The desk asked to
+lever COMBINED to the baseline's risk so it could be compared on return; it was never run, and the
+team's own Aug 5 answer was the concessive "better per unit of risk, worse per dollar deployed". At a
+matched 11.08% vol, `CORE` returns **5.33%/yr against the baseline's 5.21%**, at MaxDD **−23.87% vs
+−29.32%**, CVaR₉₉ **0.0253 vs 0.0292** and skew **−0.30 vs −0.65**. Same risk, more return, smaller
+tail. The concession was an artifact of comparing at unmatched risk.
+→ `final/evidence/strategy_menu_matched_risk.csv`.
+
+**Vendoring note.** The preset block was added to **both** copies of `config.py`, which *shrank* the
+declared vendor diff from 75 changed lines to 37 (ceiling 90) because `combined_tail_preset` now
+exists in the shared base too. Same for the three new tests, mirrored into
+`strategy/tests/test_combined.py`. Widening a fork to add a feature is how the two copies drift;
+adding to both is how they converge.
+
+**Acceptance — all met (2026-08-19):** `final/reproduce.py` reports *every published number matches*
+with the three menu books added to `TARGETS`; **51/51** shared and **61/61** package tests green;
+`git diff` over `evidence/` and `outputs/` touches only `component_verdicts.csv`, which gained its
+two post-freeze rows; the deck rebuilds byte-identically.
+
+### 21.1 Post-freeze pushes — collected, checked, verdicted
+
+The Aug 12 instruction was to collect the final work centrally, check it, and decide what enters the
+strategy. Two things landed after `final/` was built, and both are now rows in
+`component_verdicts.csv` (16 → **18 components, 6 workstreams**).
+
+| Owner | Component | Verdict | Why |
+|---|---|---|---|
+| Arjun | EM relative-vol deleveraging (Aug 12) | **NOT EVALUABLE AS QUOTED** | basis mismatch — see below |
+| Theo | Macro/option optimisation layer (Aug 14) | **NOT EVALUABLE AS COMMITTED** | inputs not committed; selection intensity unstated |
+
+**Arjun's rule carries the largest t-statistic of any teammate result in the project (3.43), and the
+comparison as written does not stand.** The first two rows of `em_deleveraging_compare.csv` are the
+*same book on two cost bases*, presented as two books: `unhedged book (ALL_net)` at 0.4659 / 5.21% /
+11.19% is this project's committed **net** baseline, while `reconstructed book (G10+EM sleeves)` at
+0.6284 / 7.03% / 11.18% is its committed **gross** baseline. The 1.81%/yr booked between them as
+`deviation_carry_%yr` is *exactly* the committed cost drag 0.018147, and the t of 14.26 on that row
+is that drag rather than a result. Drawdowns also use the cumsum convention (−0.2977 vs the base's
+−0.2932), the same gap already recorded for his duration hedge (Appendix C #22–24). So the honest
+increment is **+0.048 gross Sharpe**, not 0.4659 → 0.6768. It is measured **uncosted** while adding
+turnover by construction, and it does **not** improve MaxDD at all — so it must clear criterion (i)
+on CVaR₉₉ per window, net, before it can earn a slot. Worth finishing; not admissible yet.
+
+**⚑ A correction to our own record, made in public.** `final/VERDICTS.md` described Theo's notebook
+07 as "committed **unexecuted** — 14 code cells, 0 execution counts, 0 stored outputs". True of
+commit `ec535c6` (Aug 5); **false since `6bd8ef2` (Aug 14)**, which replaced it with a fully executed
+copy (24/24 cells, 21 with stored outputs). The blocker survives unchanged — the `_v9` input panel
+and all eleven output parquets are still absent from the repo, so nothing can be re-priced — but the
+*kind* of gap changed, from a specification with no result to a result that cannot be reproduced.
+The correction is recorded in the document rather than quietly applied, because that document's
+entire claim is that everything in it was checked. His numbers also need their basis stated: notebook
+07's best variants reach Sharpe 0.49 against **his own** baseline of 0.44 — 20 currencies, monthly,
+flat 5bp — not against the shared base's 0.4659. Same class of issue the desk saw on Jul 29.
+
+**Vidhi, Oleg and Dafu pushed nothing for the Aug 12 deadline** (last pushes Jul 21, Jul 15, Jul 31).
+Base adoption remains **1 of 5**.
+
+### 21.2 Artifacts
+
+| Artifact | What |
+|---|---|
+| `strategy/config.py`, `final/strategy/config.py` | `OFFENSIVE` · `CORE` · `DEFENSIVE` · `combined_tail_preset` now in both |
+| `final/menu.py` | builds the menu; pros/cons authored, every number from a live `run()` |
+| `final/evidence/strategy_menu.csv` | 4 books × whole-sample battery + `pros` / `cons` / `when` |
+| `final/evidence/strategy_menu_by_window.csv` | 32 rows — 4 books × 8 frozen stress windows |
+| `final/evidence/strategy_menu_matched_risk.csv` | the Aug 5 matched-risk answer |
+| `cesare/build_deck_aug19.py` → `presentations/deck_2026_08_19.html` | the Aug 19 deck; imports the house style from `build_deck_aug12.py`, byte-deterministic, verifies against a live `run()` before writing |
 
 ---
 

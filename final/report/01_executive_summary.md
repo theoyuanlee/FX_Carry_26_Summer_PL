@@ -124,10 +124,14 @@ six pre-2026 stress windows** — most dramatically COVID (−24.0% → −10.3%
    gross exposure spread across every name, **6.8 of the 7.3 points** of drawdown improvement is
    simply holding less risk. Only 0.5pp is selection, at t 0.92. What selection genuinely buys is
    **skew, −0.63 → −0.31**, which de-risking does not deliver at all.
-3. **It runs at lower risk and ends poorer.** 8.8% volatility against 11.2%, and over the full sample
-   it compounds to 2.18× against the baseline's 2.48×. Better per unit of risk, worse per dollar. We
-   have not levered it back to a matched risk level, so this is a risk-reduction result, not a
-   return-improvement one.
+3. **It runs at lower risk — and once that is corrected for, it wins on return too.** `COMBINED`
+   carries 8.8% volatility against 11.2%, and at its own risk level it compounds to 2.18× against the
+   baseline's 2.48×: better per unit of risk, worse per dollar. **Levered to matched risk (11.08%) it
+   returns 5.33%/yr against the baseline's 5.21%, at a drawdown of −23.87% against −29.32%, CVaR₉₉ of
+   0.0253 against 0.0292 and skew of −0.30 against −0.65.** Same risk, more return, smaller tail. This
+   supersedes the reading carried in earlier versions of this report, which described the result as
+   risk-reduction only; that was an artifact of comparing two books at different risk levels rather
+   than a property of the book. The leverage is a mandate parameter, not a signal.
 
 **The most valuable output is not the book.** It is that six workstreams now produce numbers on one
 baseline, so the next disagreement between two of us is about ideas rather than conventions.
@@ -191,5 +195,5 @@ are reproducible in one command each:
 python tests/test_reconciliation.py   # 12/12 — asserts 0.6284 / 0.4659 on every run
 python tests/test_episodes.py         # 11/11
 python tests/test_overlays.py         # 17/17
-python tests/test_combined.py         #  9/9   (8 in the shared base, + COMBINED_TAIL here)
+python tests/test_combined.py         # 12/12  (11 in the shared base, + COMBINED_TAIL here)
 ```

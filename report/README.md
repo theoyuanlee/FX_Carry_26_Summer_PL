@@ -61,7 +61,7 @@ Whole-sample statistics are supporting evidence only.
 | `run("COMBINED")` — the Phase-4 engine | 0.6331 | **0.4891** | **−19.1%** | **0.0200** | 0.5902 |
 
 Test suite: `test_reconciliation.py` 12/12 · `test_episodes.py` 11/11 ·
-`test_overlays.py` 17/17 · `test_combined.py` 8/8.
+`test_overlays.py` 17/17 · `test_combined.py` 11/11.
 
 The 2026-08-05 progress deck built from the same CSVs is
 [`cesare/presentations/deck_2026_08_05.html`](../cesare/presentations/deck_2026_08_05.html),

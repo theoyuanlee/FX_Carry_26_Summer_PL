@@ -58,7 +58,7 @@ Verify your environment in one command:
 python strategy/tests/test_reconciliation.py     # expect "12/12 passed"
 python strategy/tests/test_episodes.py           # expect "11/11 passed"
 python strategy/tests/test_overlays.py           # expect "17/17 passed"
-python strategy/tests/test_combined.py           # expect "8/8 passed"
+python strategy/tests/test_combined.py           # expect "11/11 passed"
 ```
 
 ---
@@ -329,7 +329,7 @@ comparison across teammates is the deliverable.
    Cesare as a request.
 3. **Run `python strategy/tests/test_reconciliation.py` before and after your work.** Expect
    `12/12 passed`, plus `11/11` from `tests/test_episodes.py`, `17/17` from
-   `tests/test_overlays.py` and `8/8` from `tests/test_combined.py` — 48 in total. If any fails,
+   `tests/test_overlays.py` and `11/11` from `tests/test_combined.py` — 51 in total. If any fails,
    stop and report — do not build on a base that is not reconciling.
 4. **Always report gross AND net**, on the same window, next to the baseline. A result quoted
    without its cost drag is not a result. Use `summary()`, which does both by default.

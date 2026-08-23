@@ -153,6 +153,81 @@ def test_combined_leg_pays_and_reports_coverage():
           f"{r.external_coverage['TLT']} quote gaps")
 
 
+def test_menu_aliases_are_bit_identical():
+    """CORE and DEFENSIVE are aliases, and an alias that drifts is a second book.
+
+    The menu names exist so the desk can talk about a mandate rather than a code
+    name. They must therefore be the SAME books, not re-derivations of them — the
+    whole reason for aliasing rather than redefining is that a second definition
+    can drift from the ladder it is supposed to reproduce. Asserted at 0.0, not at
+    a tolerance: these resolve through the same builder, so any difference at all
+    means the alias has grown a body of its own.
+    """
+    for menu, shipped in (("CORE", "COMBINED"), ("DEFENSIVE", "COMBINED_TAIL")):
+        assert menu in PRESETS, f"{menu} missing from PRESETS"
+        assert callable(PRESETS[menu]), f"{menu} must stay a callable"
+        try:
+            a, b = run(menu), run(shipped)
+        except FileNotFoundError as exc:
+            raise Skip(str(exc)) from exc
+        err = float((a.net - b.net).abs().max())
+        assert err == TOL_EXACT, f"{menu} != {shipped}: max |dnet| {err:.2e}"
+        assert a.config.name == menu, f"{menu} lost its label: {a.config.name!r}"
+    print("  menu aliases bit-identical     CORE==COMBINED, DEFENSIVE==COMBINED_TAIL")
+
+
+def test_offensive_is_a_risk_dial_not_an_edge():
+    """OFFENSIVE must buy quantity, not quality — and be honest about it.
+
+    The claim made for this book in the deck and in `config.py` is precise: it
+    earns the same Sharpe as the baseline and simply holds more of it. If a future
+    edit made it *outperform* on a risk-adjusted basis, the honest description
+    would have changed and the slide would be wrong, so that is asserted as a
+    failure here rather than celebrated.
+    """
+    assert "OFFENSIVE" in PRESETS, "OFFENSIVE missing from PRESETS"
+    assert not callable(PRESETS["OFFENSIVE"]), (
+        "OFFENSIVE must stay a constant — it needs no file IO, and making it a "
+        "callable would import-couple it to the teammate inputs for nothing")
+
+    off, base = run("OFFENSIVE"), run()
+    o = off.summary(benchmark=None).loc["OFFENSIVE_net"]
+    b = base.summary(benchmark=None).loc["ALL_net"]
+
+    assert float(o["ann_vol"]) > float(b["ann_vol"]), "OFFENSIVE must carry more risk"
+    assert float(o["ann_return"]) > float(b["ann_return"]), "...and more return"
+    assert float(o["max_drawdown"]) < float(b["max_drawdown"]), "...and a deeper drawdown"
+    # The honesty clause: no risk-adjusted improvement is being claimed.
+    assert float(o["sharpe"]) <= float(b["sharpe"]) + 1e-9, (
+        f"OFFENSIVE now beats the baseline on Sharpe ({o['sharpe']:.4f} vs "
+        f"{b['sharpe']:.4f}) — it is described everywhere as a risk dial that "
+        f"earns the same Sharpe. Update the description or the target.")
+    print(f"  offensive is a risk dial       vol {o['ann_vol']:.3f} vs "
+          f"{b['ann_vol']:.3f}, Sharpe {o['sharpe']:.4f} vs {b['sharpe']:.4f}")
+
+
+def test_menu_is_a_monotone_ladder():
+    """The deck's central claim: each book is strictly more protected than the last.
+
+    OFFENSIVE -> baseline -> CORE -> DEFENSIVE must fall monotonically in realised
+    volatility and rise monotonically in Calmar. This is the one assertion that
+    would catch the menu quietly ceasing to be a ladder, which is the only thing
+    that makes presenting three books instead of one defensible.
+    """
+    try:
+        books = [(k, run(k)) for k in ("OFFENSIVE", "ALL", "CORE", "DEFENSIVE")]
+    except FileNotFoundError as exc:
+        raise Skip(str(exc)) from exc
+    rows = [(k, r.summary(benchmark=None).loc[f"{r.config.name}_net"]) for k, r in books]
+
+    vols = [float(s["ann_vol"]) for _, s in rows]
+    assert vols == sorted(vols, reverse=True), f"volatility is not monotone: {vols}"
+    cal = [float(s["calmar"]) for _, s in rows]
+    assert cal == sorted(cal), f"Calmar is not monotone: {cal}"
+    print("  menu is a monotone ladder      vol " +
+          " > ".join(f"{v:.3f}" for v in vols))
+
+
 def test_baseline_is_untouched():
     """Adding a preset cannot move the committed headline."""
     r = run()

@@ -159,8 +159,8 @@ the call we would most like challenged.
 | baseline | 0.6284 | 0.4659 | 11.2% | −29.3% | 0.0292 | 0.675 | 1.81%/yr |
 | **`COMBINED`** | 0.6331 | **0.4891** | **8.8%** | **−19.1%** | **0.0200** | 0.590 | 1.27%/yr |
 
-`run("COMBINED")` reproduces the ladder row at `0.0e+00`; `test_combined.py` passes 8/8 in the
-shared base and 9/9 in this package, where it also asserts the `COMBINED_TAIL` alternative
+`run("COMBINED")` reproduces the ladder row at `0.0e+00`; `test_combined.py` passes 11/11 in the
+shared base and 12/12 in this package, where it also asserts the `COMBINED_TAIL` alternative
 (see [`../VERDICTS.md`](../VERDICTS.md)).
 
 ---
@@ -201,13 +201,29 @@ The exception is real and worth keeping: **selection buys skew, −0.63 → −0
 not deliver at all.** Holding less of everything makes a book smaller; dropping the right names makes
 it less asymmetric. Those are different products and only the second is a skill claim.
 
-**3. The combined book runs at a lower risk level.** 8.8% annualised volatility against the
-baseline's 11.2%. Part of the drawdown improvement is therefore simply less risk, and the comparison
-is stated that way rather than presented as a free lunch. The consequence is visible in raw wealth:
-over the full sample the baseline compounds to **2.48×** and `COMBINED` to **2.18×**. It is better
-per unit of risk and worse per dollar deployed. **We have not levered it back to a matched risk
-level**, and until we do, the fair reading is that this is a risk-reduction result rather than a
-return-improvement one.
+**3. The combined book runs at a lower risk level — and the matched-risk comparison has now been
+run.** `COMBINED` carries 8.8% annualised volatility against the baseline's 11.2%, so part of the
+drawdown improvement is simply less risk and the comparison is stated that way rather than presented
+as a free lunch. At its own risk level the consequence is visible in raw wealth: the baseline
+compounds to **2.48×** and `COMBINED` to **2.18×** — better per unit of risk, worse per dollar
+deployed.
+
+**That concession no longer stands once the risk levels are matched, and the correction is the more
+interesting result.** Levered to 11.08% volatility against the baseline's 11.19%:
+
+| At matched risk | Ann. return | Ann. vol | Sharpe | MaxDD | CVaR₉₉ | Skew |
+|---|---|---|---|---|---|---|
+| baseline | 5.21% | 11.19% | 0.4659 | −29.32% | 0.0292 | −0.65 |
+| **`COMBINED` levered** | **5.33%** | 11.08% | **0.4813** | **−23.87%** | **0.0253** | **−0.30** |
+
+Same risk, **more return, a 5.4pp shallower drawdown, 13% less CVaR₉₉ and less than half the negative
+skew**. Earlier versions of this chapter said we had not levered the book back and that the fair
+reading was therefore risk-reduction rather than return-improvement. That was correct as a statement
+about what had been measured and wrong as a description of the book: comparing 8.8% vol against 11.2%
+vol was never a like-for-like comparison, and the honest version had to be run rather than reasoned
+about. The leverage is a mandate parameter chosen with the whole sample in view — legitimate for this
+comparison, and not offered as a trading rule.
+*Source: `../evidence/strategy_menu_matched_risk.csv`.*
 
 **4. It gives up upside, and it is worse in the two 2026 windows.** Per stress window, net:
 

@@ -1,10 +1,11 @@
 # `cesare/presentations/` — the project's HTML decks
 
-Four self-contained HTML pages, newest first. Each opens from a `file://` path with no network:
+Five self-contained HTML pages, newest first. Each opens from a `file://` path with no network:
 no CDN, no external stylesheet, no remote image. Open them in a browser; there is nothing to build.
 
 | Deck | Date | What it is | Made by |
 |---|---|---|---|
+| [`deck_2026_08_19.html`](deck_2026_08_19.html) | 2026-08-19 | **The deliverable.** One engine, three books — OFFENSIVE / CORE / DEFENSIVE — with the pros and cons of each, the per-window cost of insurance, and the matched-risk comparison the desk asked for on Aug 5 | **Generated** — `python cesare/build_deck_aug19.py` |
 | [`deck_2026_08_12.html`](deck_2026_08_12.html) | 2026-08-12 | BofA progress deck. The evaluation closed: all 16 components across all six workstreams with a verdict, the two named gaps, and the one contested call | **Generated** — `python cesare/build_deck_aug12.py` |
 | [`deck_2026_08_05.html`](deck_2026_08_05.html) | 2026-08-05 | BofA progress deck. Six workstreams folded into one engine, the tail re-verdict, per-stress-window results, and what is new since the Jul 29 meeting | **Generated** — `python cesare/build_deck.py` |
 | [`overview.html`](overview.html) | 2026-08-03 | Visual overview of the shared base [`../../strategy/`](../../strategy/) — what `run()` is, the guardrails, and the headline books | Hand-made |
@@ -18,13 +19,23 @@ from a CSV cell rather than typed — that is what keeps the repo's standing pro
 against a live `run()` before the page is written, and fail rather than publish a stale slide. To
 change one, change its generator and re-run it.
 
-**Only the Aug 12 deck rebuilds byte-identically.** `build_deck.py` renders seven matplotlib
+**The Aug 12 and Aug 19 decks rebuild byte-identically.** `build_deck.py` renders seven matplotlib
 figures, and matplotlib assigns random SVG element ids per run — so regenerating
 `deck_2026_08_05.html` produces a ~900-line diff in which *every* line is an id, the file length is
 unchanged to the byte and all 13,871 numeric tokens match (plan Appendix C #41). A dirty Aug 5 deck
 is therefore not evidence of anything until the ids are normalised; a clean one would be the
 surprise. `build_deck_aug12.py` has no figures and is deterministic — run it twice and the hashes
-match, which is why it is safe to regenerate before a meeting.
+match, which is why it is safe to regenerate before a meeting. `build_deck_aug19.py` inherits that
+property deliberately: its two charts are hand-emitted inline SVG with coordinates computed from the
+CSV values, so there is no figure library to randomise ids. It also *imports* the CSS and the
+verdict-table renderer from `build_deck_aug12.py` rather than copying them again — the Aug 12 deck
+was written without matplotlib precisely so it stays cheap to import, and a third fork of the house
+style would be a third thing to keep in sync.
+
+**The Aug 19 deck verifies before it publishes.** It asserts all four books against a live `run()`
+and refuses to write the page if `strategy_menu.csv` is stale or if the menu has stopped being a
+monotone risk ladder — the claim its central slide rests on. Rebuild it with
+`python final/menu.py && python cesare/build_deck_aug19.py` if any strategy number ever moves.
 
 **`overview.html` is a July snapshot and its episode buckets are superseded.** Its baseline numbers
 are still correct (gross 0.6284 / net 0.4659, G10 0.1669 / 0.1191), but it predates the `COMBINED`

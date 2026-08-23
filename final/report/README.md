@@ -82,7 +82,7 @@ strategy**; it exists so the cost of the decision (0.043 net Sharpe, 5.4% relati
 priced rather than asserted. Full reasoning in [`../VERDICTS.md`](../VERDICTS.md).
 
 Test suite, run from inside this package: `tests/test_reconciliation.py` 12/12 ·
-`tests/test_episodes.py` 11/11 · `tests/test_overlays.py` 17/17 · `tests/test_combined.py` **9/9**
+`tests/test_episodes.py` 11/11 · `tests/test_overlays.py` 17/17 · `tests/test_combined.py` **12/12**
 (8 as shipped in the shared base, plus the `COMBINED_TAIL` assertion) ·
 `tests/test_standalone.py` 5/5 · `tests/test_vendor_drift.py` 4/4. Or just
 `python reproduce.py`, which runs the books and prints this table.

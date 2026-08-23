@@ -40,6 +40,49 @@ worth more than adding incremental gains.
 The fourth row is not the strategy. It is the one contested verdict made runnable — see
 [Where the honest reader should push back](#where-the-honest-reader-should-push-back).
 
+### The delivered menu — one engine, three books
+
+The same construction at three points on a single **risk-appetite ladder**, so the desk can pick a
+mandate rather than accept a default. Each is a named preset; `CORE` and `DEFENSIVE` are aliases onto
+the two books above, asserted bit-identical in the tests, so there is exactly one definition of the
+strategy.
+
+| Book | When | Return | Vol | Sharpe | Sortino | Calmar | MaxDD | CVaR₉₉ |
+|---|---|---|---|---|---|---|---|---|
+| `run("OFFENSIVE")` | calm macro, risk-on | **7.64%** | 16.59% | 0.4606 | 0.627 | 0.157 | **−41.24%** | 0.0430 |
+| *`run()` — reference* | *not a mandate* | *5.21%* | *11.19%* | *0.4659* | *0.634* | *0.160* | *−29.32%* | *0.0292* |
+| `run("CORE")` | default / all-weather | 4.33% | 8.85% | 0.4891 | 0.694 | 0.211 | −19.07% | 0.0200 |
+| `run("DEFENSIVE")` | desk judges the regime stressed | 4.43% | 8.32% | **0.5323** | **0.760** | **0.219** | −19.07% | **0.0189** |
+
+**Every risk-adjusted ratio improves monotonically down the ladder while return moves monotonically
+the other way.** That is the trade-off, with no story on top of it.
+
+Two things this menu is careful not to claim. `OFFENSIVE` is the baseline levered to a 15% vol
+target — a **risk dial, not an edge**: its Sharpe is the baseline's within noise, by construction,
+and the −41% drawdown is the price. And **no rule is provided for switching between the three**,
+because every exposure-timing rule this project tested came back null; choosing a rung is a mandate
+decision, not a signal we trade.
+
+Built by [`menu.py`](menu.py) into [`evidence/strategy_menu.csv`](evidence/strategy_menu.csv), with
+the pros and cons of each book as authored columns and the per-window table in
+[`evidence/strategy_menu_by_window.csv`](evidence/strategy_menu_by_window.csv).
+
+### At matched risk
+
+The combined book runs at 8.85% volatility against the baseline's 11.19%, so comparing them on
+return is comparing two risk levels. Levered onto the baseline's risk
+([`evidence/strategy_menu_matched_risk.csv`](evidence/strategy_menu_matched_risk.csv)):
+
+| At matched risk | Return | Vol | Sharpe | MaxDD | CVaR₉₉ | Skew |
+|---|---|---|---|---|---|---|
+| baseline | 5.21% | 11.19% | 0.4659 | −29.32% | 0.0292 | −0.65 |
+| **CORE levered** | **5.33%** | 11.08% | **0.4813** | **−23.87%** | **0.0253** | **−0.30** |
+
+Same risk, **more return, a 5.4pp shallower drawdown, 13% less CVaR₉₉ and less than half the negative
+skew**. This retires the "better per unit of risk, worse per dollar deployed" reading — that was an
+artifact of comparing at unmatched risk. The leverage is a mandate parameter chosen with the whole
+sample in view: legitimate for a like-for-like comparison, and not offered as a trading rule.
+
 ---
 
 ## What the strategy is
@@ -121,7 +164,7 @@ python final/reproduce.py
 python final/tests/test_reconciliation.py   # 12/12  the numbers reconcile to the committed CSVs
 python final/tests/test_episodes.py         # 11/11  frozen windows, per-leg split, the short-window rule
 python final/tests/test_overlays.py         # 17/17  composition, the gross-non-increasing contract
-python final/tests/test_combined.py         #   9/9  the COMBINED preset, and COMBINED_TAIL
+python final/tests/test_combined.py         # 12/12  the COMBINED preset, COMBINED_TAIL, and the menu
 python final/tests/test_standalone.py       #   5/5  does this package still run with nothing else?
 python final/tests/test_vendor_drift.py     #   4/4  has any vendored copy drifted from its source?
 ```

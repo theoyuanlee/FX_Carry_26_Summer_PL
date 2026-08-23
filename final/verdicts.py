@@ -179,21 +179,30 @@ def build() -> pd.DataFrame:
         measurement="NOT MEASURED — no return series exists to re-price",
         verdict="NOT EVALUABLE AS COMMITTED",
         reconstruction=(
-            "Impossible from committed data. Commit ec535c6 (2026-08-05) added "
-            "07_option_conditioned_carry_strategy.ipynb and "
-            "theo/06_options_filter_regression(9).ipynb — notebooks only, no data. "
-            "Notebook 07 is committed UNEXECUTED (14 code cells, 0 execution "
-            "counts, 0 stored outputs) and its declared input "
+            "Impossible from committed data — but NOT for the reason first "
+            "recorded, and the correction matters. Until 2026-08-19 this row said "
+            "notebook 07 was committed unexecuted with 0 stored outputs. That was "
+            "true of commit ec535c6 (2026-08-05) and is FALSE of what is in the "
+            "repo now: commit 6bd8ef2 (2026-08-14) replaced it with a fully "
+            "executed copy, 24/24 code cells, 21 carrying stored outputs. The "
+            "blocker survives the correction unchanged: its declared input "
             "option_filter_regression_panel_primary_v9.parquet exists nowhere on "
-            "disk or in git, so cell 3 raises FileNotFoundError. It is a "
-            "specification, not a result"),
+            "disk or in git, and neither do the 11 parquets the notebook writes, "
+            "so nothing here can be re-run or re-priced. It is now a result we can "
+            "read but cannot reproduce, which is a different gap from the one "
+            "originally minuted"),
         evidence="(none — that is the gap)",
-        caveat=("TO CLOSE: run theo/06_options_filter_regression(9).ipynb and commit "
-                "the _v9 panel; notebook 07 then produces a return series that "
-                "re-prices through the same weight_overlay path as everything else. "
-                "His ADOPTED overlay is unaffected — it keys off "
-                "fx_option_signal_panel.parquet from commit 9d2ec5e, committed and "
-                "unchanged since 2026-07-18"))
+        caveat=("TO CLOSE: commit the _v9 panel; notebook 07 then produces a return "
+                "series that re-prices through the same weight_overlay path as "
+                "everything else. Read the executed outputs with the basis in mind "
+                "before quoting them: its best variants reach Sharpe 0.49 against "
+                "HIS baseline of 0.44 — 20 currencies, monthly, a flat 5bp cost — "
+                "not against the shared base's 0.4659 on 27 currencies daily with "
+                "real per-currency bid/ask. A +0.05 improvement measured on a "
+                "different book is not comparable to this one; that is the same "
+                "issue the desk saw on 2026-07-29. His ADOPTED overlay is "
+                "unaffected — it keys off fx_option_signal_panel.parquet from "
+                "commit 9d2ec5e, unchanged since 2026-07-18"))
 
     # -- Dafu: the contested one -------------------------------------------
     v = _standalone("VIX percentile gate (p80 / 756d)")
@@ -250,6 +259,66 @@ def build() -> pd.DataFrame:
                 "does not rest on a judgement call about a convention her outputs do not "
                 "record. Her gate covers 173 months from 2012-02, so its euro_2011 "
                 "window win rests on partial coverage (~11 of 24 months)"))
+
+    # -- Post-freeze pushes: collected, checked, and reported as found -------
+    # Both landed AFTER final/ was built on 2026-08-12 and after the 2026-08-07
+    # scope freeze. They are in this table because the Aug 12 instruction was to
+    # collect and check centrally, and a component that arrived late is still a
+    # component. Neither is folded into any book.
+    add(owner="Arjun", component="EM relative-vol deleveraging (2026-08-12)",
+        hook="exposure (proposed)", bar=BAR_SLOT,
+        measurement="NOT MEASURED ON THIS BASIS — his table is gross, the bar is net",
+        verdict="NOT EVALUABLE AS QUOTED",
+        reconstruction=(
+            "Checked, and the comparison does not stand as written. In "
+            "arjun/outputs/em_deleveraging_compare.csv the first two rows are the "
+            "SAME book on two cost bases, presented as two different books: "
+            "'unhedged book (ALL_net)' is 0.4659 / 5.21%/yr / 11.19% vol, which is "
+            "this project's committed NET baseline, while 'reconstructed book "
+            "(G10+EM sleeves)' is 0.6284 / 7.03% / 11.18%, which is its committed "
+            "GROSS baseline. The 1.81%/yr gap booked between them as "
+            "deviation_carry_%yr is exactly the committed cost drag 0.018147, and "
+            "the t of 14.26 on that row is that drag rather than a result. So the "
+            "rule's honest increment is +0.048 GROSS Sharpe (0.6284 -> 0.6768, "
+            "t 3.43), not 0.4659 -> 0.6768. Drawdowns in that file also use the "
+            "cumsum convention (-0.2977) rather than the wealth-curve convention "
+            "the base reports (-0.2932), the same gap already recorded for his "
+            "duration hedge"),
+        evidence="arjun/outputs/em_deleveraging_compare.csv",
+        caveat=("The idea may well survive — a +0.048 gross Sharpe at t 3.43 is the "
+                "largest t on any teammate result in the project, and it beats his "
+                "own whole-book de-risk control (0.6768 vs 0.5715). Two things must "
+                "happen before it can earn a slot. It is measured UNCOSTED while "
+                "being a rule that adds turnover by construction, so the net number "
+                "is the one that decides and it is not yet computed. And it does "
+                "not improve MaxDD at all (-0.2977 before and after), so it has to "
+                "clear criterion (i) on CVaR99 per window. Not folded in: the slot "
+                "rule is measured net, per window, and nobody gets in on a "
+                "t-statistic alone"))
+
+    add(owner="Theo", component="Macro/option optimisation layer (2026-08-14)",
+        hook="(never attached)", bar=BAR_SLOT,
+        measurement="NOT MEASURED — no committed panel, and selection intensity unstated",
+        verdict="NOT EVALUABLE AS COMMITTED",
+        reconstruction=(
+            "Commit 6801a53 (2026-08-14) added "
+            "08_comprehensive_carry_strategy_optimization(6).ipynb (22 MB, 12/12 "
+            "executed) and a slide PDF. It freezes 234 months into "
+            "discovery/validation/evaluation splits of 140/47/47 and reports a best "
+            "primary overlay, OIL_return_1m gross scaling at 50%, with a "
+            "full-sample Sharpe of 0.65 and an evaluation-window Sharpe of 1.59. "
+            "None of its inputs or outputs are committed, so none of it can be "
+            "re-priced on the shared base"),
+        evidence="(none — that is the gap)",
+        caveat=("Two reasons not to quote the 1.59 without its context, both "
+                "structural rather than critical of the work. It is measured over a "
+                "47-month evaluation window, which is short enough that the "
+                "project's own 120-day rule would suppress an annualised ratio over "
+                "a comparable span. And the winning overlay is selected from a "
+                "candidate set the notebook itself counts at 172 Tier-3 plus 98 "
+                "Tier-2 rules, so the selection intensity has to be reported "
+                "alongside the survivor. TO CLOSE: commit the panel and one daily "
+                "net return series on the common window"))
 
     # -- Oleg: nothing to test, and that is the finding ---------------------
     add(owner="Oleg", component="(no component submitted)", hook="—",

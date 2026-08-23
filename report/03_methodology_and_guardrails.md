@@ -121,13 +121,13 @@ Internal identities hold to `0.0e+00`: per-currency contributions sum to gross, 
 components equal excess returns, and net equals gross minus cost. Both hooks are exact no-ops at
 neutral settings, so an extension measures only its own effect.
 
-**48 tests** across four suites guard this, and they are run before and after any change:
+**51 tests** across four suites guard this, and they are run before and after any change:
 
 ```
 python strategy/tests/test_reconciliation.py    # 12/12 — reconciliation, identities, hook no-ops
 python strategy/tests/test_episodes.py          # 11/11 — frozen windows, leg split, the two v1.1.0 fixes
 python strategy/tests/test_overlays.py          # 17/17 — composition, gross-non-increasing, ExternalLeg
-python strategy/tests/test_combined.py          #   8/8 — the COMBINED preset
+python strategy/tests/test_combined.py          #  11/11 — the COMBINED preset and the menu
 ```
 
 ---
@@ -176,7 +176,7 @@ Sharpe and one uncomfortable table, and both are reported.
 
 ## 3.6 What this chapter establishes
 
-The methodology is not novel and is not meant to be. What it is, is *enforced*: 48 tests, frozen
+The methodology is not novel and is not meant to be. What it is, is *enforced*: 51 tests, frozen
 windows, guardrails in code rather than in memory, and a written record of the four occasions on
 which a plausible-looking number turned out to be wrong. Every result in chapters 4 through 9 was
 produced under these constraints, and the ones that are nulls are nulls under them too.
