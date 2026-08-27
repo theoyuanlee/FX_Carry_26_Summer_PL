@@ -7,8 +7,12 @@
 #
 # What is NOT here, deliberately:
 #   * the Bloomberg pull (xbbg, blpapi) -> requirements-bbg.txt, terminal only
-#   * installed-but-unused libraries (plotly, tqdm, fastparquet) -- if it is not
-#     imported anywhere in the repo it does not belong in the environment spec
+#   * installed-but-unused libraries (tqdm, fastparquet) -- if it is not imported
+#     anywhere in the repo it does not belong in the environment spec
+#
+# Re-verified 2026-08-27 by grepping every import across all .py and .ipynb files.
+# That pass corrected one error: plotly was listed here as unused and is in fact a
+# hard top-level import in arjun/fx_analysis.ipynb. It is now pinned below.
 
 # --- Core scientific / data stack (every workstream) ---
 numpy>=2.1          # 2.1.3
@@ -27,9 +31,21 @@ statsmodels>=0.14   # 0.14.6   Newey-West HAC regressions, everywhere
 # See plan §5.2.
 pyarrow>=24.0       # 24.0.0
 
+# OPTIONAL, not pinned: `polars`. arjun/strategy.ipynb lazily imports it inside a
+# `load_wide_robust` fallback used only when the local pyarrow build cannot read the
+# repo's parquet files -- i.e. it is a workaround for the caveat above, not a
+# dependency. Fix pyarrow instead and the fallback never fires.
+
 # --- Plotting ---
 matplotlib>=3.10    # 3.10.0   stage notebooks; cesare/build_deck.py renders the
-                    #          Aug 5 deck's figures to inline SVG through it
+                    #          Aug 5 deck's figures to inline SVG through it. The
+                    #          Aug 12 and Aug 19 builders (build_deck_aug12.py,
+                    #          build_deck_aug19.py) deliberately do NOT use it --
+                    #          they hand-emit SVG so the decks rebuild
+                    #          byte-identically. final/menu.py plots nothing
+plotly>=5.20        # 5.24.1    arjun/fx_analysis.ipynb only, and a HARD import there
+                    #          (plotly.express / graph_objects / subplots at cell
+                    #          top). Nothing else in the repo uses it
 seaborn>=0.13       # 0.13.2   only cesare/data_visualization.ipynb
 
 # --- Machine learning ---

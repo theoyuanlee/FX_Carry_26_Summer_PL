@@ -17,6 +17,16 @@ todos:
 isProject: false
 ---
 
+> ## ⚠ SUPERSEDED — 2026-07-13
+>
+> This is a **proposal**, not a description of what was built. It designs a shared backtest harness
+> under `src/fxcarry/`. What shipped instead is [`strategy/`](../../strategy/) — same goal, different
+> layout — and the links below point at a module tree that was never created, so they do not resolve.
+>
+> They are left broken on purpose: they are evidence of a design that changed. For what was actually
+> built, read [`strategy/README.md`](../../strategy/README.md).
+
+
 # FX Carry Harness And Research Direction
 
 ## Recommendation

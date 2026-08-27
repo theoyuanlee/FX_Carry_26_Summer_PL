@@ -86,6 +86,7 @@ the two marked **in `final/`**. A file's producer is where to look when a number
 |---|---|
 | `../combined_engine.py` | `p4_component_standalone` · `p4_component_by_episode` · `p4_combined_ladder` · `p4_combined_by_episode` · `p4_selection_vs_derisking` |
 | `../verdicts.py` | `component_verdicts` |
+| `../menu.py` | `strategy_menu` · `strategy_menu_by_window` · `strategy_menu_matched_risk` |
 
 Both write back into this folder. That is intentional: **a clean `git diff` after
 `python final/combined_engine.py` is the reproduction proof**, and a dirty one is a result worth
@@ -104,12 +105,15 @@ reading before it is committed.
 | `strategy_costs_by_ccy.csv` | 27 × 5 | Per-currency half-spreads and turnover — where the cost drag comes from |
 | `weights_g10_monthly.csv` · `weights_combined_monthly.csv` | 234 × 10/28 | Month-end traded weights |
 | `weights_{equal,inv_vol,erc,mvo}_monthly.csv` | 234 × 28 each | Month-end **unit-book** weights (gross 2, pre-vol-target) so the four schemes are directly comparable. Cited by pattern, so a literal filename grep reports them as unreferenced |
+| `strategy_menu.csv` | 4 × 19 | **The delivered menu.** OFFENSIVE / reference / CORE / DEFENSIVE on one risk-appetite ladder, with the pros and cons of each book as authored columns. `test_combined.py` asserts the ladder is monotone |
+| `strategy_menu_by_window.csv` | 32 × 15 | The same four books on the frozen `STRESS` windows — the per-window cost of insurance |
+| `strategy_menu_matched_risk.csv` | 2 × 13 | `CORE` levered onto the baseline's 11.19% vol. The like-for-like comparison that retires the "better per unit of risk, worse per dollar" reading |
 
 ### Phase 4 — the integration evidence (what the verdict table is built from)
 
 | File | Shape | Contents |
 |---|---|---|
-| `component_verdicts.csv` | 16 × 9 | **The centrepiece.** Every extension from all six workstreams: hook, pre-registered bar, measurement, verdict, reconstruction method, evidence file, caveat |
+| `component_verdicts.csv` | 18 × 9 | **The centrepiece.** Every extension from all six workstreams: hook, pre-registered bar, measurement, verdict, reconstruction method, evidence file, caveat |
 | `p4_combined_ladder.csv` | 16 × 32 | The four ladders — `add` / `loo` / `final` / `final_loo` — with NW alpha vs the *previous rung*, per-window win counts, and the slot verdict. The file the VIX-gate decision rests on |
 | `p4_component_standalone.csv` | 7 × 46 | Each component alone on the base against its own stated bar, with `reconstruction` per row and the full `config.describe()` as `cfg_*` columns |
 | `p4_selection_vs_derisking.csv` | 3 × 12 | The gross-matched control: how much of a trimming overlay's tail gain is *selection* and how much is simply holding less. Reproduces the overlay's daily gross to 8.9e-16 |

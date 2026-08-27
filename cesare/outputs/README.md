@@ -48,4 +48,4 @@ Run from the repo root.
   reconstruction method recorded per row.
 - The four `weights_{scheme}_monthly.csv` files are **unit-book** weights (gross 2, pre-vol-target),
   so the schemes are directly comparable. A literal filename grep will report them as unreferenced;
-  they are cited by pattern in Appendix A and `report/06_risk_managed_carry.md`.
+  they are cited by pattern in Appendix A and `final/report/06_risk_managed_carry.md`.

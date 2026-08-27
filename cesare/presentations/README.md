@@ -3,9 +3,14 @@
 Five self-contained HTML pages, newest first. Each opens from a `file://` path with no network:
 no CDN, no external stylesheet, no remote image. Open them in a browser; there is nothing to build.
 
+> **The 2026-08-26 final presentation deck is not in the repository.** It was presented from a copy
+> held outside this repo. When it is added it belongs here as `deck_2026_08_26.html`, and this table
+> gets a row for it above the Aug 19 entry. Until then, **`deck_2026_08_19.html` is the most recent
+> deck the repo can reproduce**, and it carries the delivered menu.
+
 | Deck | Date | What it is | Made by |
 |---|---|---|---|
-| [`deck_2026_08_19.html`](deck_2026_08_19.html) | 2026-08-19 | **The deliverable.** One engine, three books — OFFENSIVE / CORE / DEFENSIVE — with the pros and cons of each, the per-window cost of insurance, and the matched-risk comparison the desk asked for on Aug 5 | **Generated** — `python cesare/build_deck_aug19.py` |
+| [`deck_2026_08_19.html`](deck_2026_08_19.html) | 2026-08-19 | **The deliverable, and the last deck generated in-repo.** One engine, three books — OFFENSIVE / CORE / DEFENSIVE — with the pros and cons of each, the per-window cost of insurance, and the matched-risk comparison the desk asked for on Aug 5 | **Generated** — `python cesare/build_deck_aug19.py` |
 | [`deck_2026_08_12.html`](deck_2026_08_12.html) | 2026-08-12 | BofA progress deck. The evaluation closed: all 16 components across all six workstreams with a verdict, the two named gaps, and the one contested call | **Generated** — `python cesare/build_deck_aug12.py` |
 | [`deck_2026_08_05.html`](deck_2026_08_05.html) | 2026-08-05 | BofA progress deck. Six workstreams folded into one engine, the tail re-verdict, per-stress-window results, and what is new since the Jul 29 meeting | **Generated** — `python cesare/build_deck.py` |
 | [`overview.html`](overview.html) | 2026-08-03 | Visual overview of the shared base [`../../strategy/`](../../strategy/) — what `run()` is, the guardrails, and the headline books | Hand-made |
@@ -15,7 +20,7 @@ no CDN, no external stylesheet, no remote image. Open them in a browser; there i
 
 **The two generated decks are generated, so do not edit them.** Every number in the prose is pulled
 from a CSV cell rather than typed — that is what keeps the repo's standing promise (plan §1,
-`report/README.md` rule 1) that every number traces to a committed file. Both assert their headline
+`final/report/README.md` rule 1) that every number traces to a committed file. Both assert their headline
 against a live `run()` before the page is written, and fail rather than publish a stale slide. To
 change one, change its generator and re-run it.
 

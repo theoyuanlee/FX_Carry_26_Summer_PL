@@ -1333,7 +1333,7 @@ book. Verified 2026-08-03 by grepping `from strategy import` across the repo:
 | Arjun | ⬜ | `import fx_utils as fx` plus **three inline `build_book()` copies** across his notebooks | Collapse to `run(**overrides)`; `arjun_utils.py` already delegates to the engine, so this is small |
 | Theo | ⬜ | Own carry panels built directly off `data/raw/` parquet | Replace the panel build with `load_panels()`; his option filter becomes `filter_signal` / `weight_overlay` |
 | Vidhi | ⬜ | `vidhi/src/*` — **plus two known defects the base fixes**: returns use `log_return(spot)` only (carry never added → Sharpe −0.71, −72% DD) and the feature screen is run on the full sample (leak) | Her overlay already multiplies a return series by a probability scalar — that is exactly the `exposure` hook |
-| Oleg | ⬜ | `oleg/ v1/carry_utils.py`, a private mini-copy of the engine; `oleg/v2/utils.py` is 0 bytes | Delete the copy, `from strategy import run` |
+| Oleg | ⬜ | `oleg/v1/carry_utils.py`, a private mini-copy of the engine; `oleg/v2/utils.py` is 0 bytes | Delete the copy, `from strategy import run` |
 
 Per-teammate porting recipes are already written in `strategy/README.md` §"Porting existing work
 onto the base" — no new documentation is needed, only the deadline.

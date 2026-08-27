@@ -3,7 +3,7 @@
     python cesare/build_deck.py        # -> cesare/presentations/deck_2026_08_05.html
 
 **Why this is a module and not a hand-written HTML file.** The repo's standing
-promise (plan §1, `report/README.md` rule 1) is that every number traces to a
+promise (plan §1, `final/report/README.md` rule 1) is that every number traces to a
 committed CSV. A hand-authored deck makes that a promise; a generator makes it
 mechanical. Every figure here is rendered from a file in `cesare/outputs/`, and
 every number that appears in the prose is pulled from a CSV cell through `NUM`

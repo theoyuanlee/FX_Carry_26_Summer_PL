@@ -239,7 +239,7 @@ it, and the distinction is preserved per row rather than smoothed away.
 | [`strategy/`](strategy/) | The engine: config, the run pipeline, ~45 pure functions, frozen windows, overlay composition |
 | [`inputs/`](inputs/) | The three teammate outputs the strategy reads, with [`PROVENANCE.md`](inputs/PROVENANCE.md) |
 | [`data/raw/`](data/raw/) | 13 parquets + the ticker manifest, 35 MB, with [`PROVENANCE.md`](data/raw/PROVENANCE.md) |
-| [`evidence/`](evidence/) | 60 committed CSVs — every number in the project — with an index and per-file descriptions |
+| [`evidence/`](evidence/) | 63 committed CSVs — every number in the project — with an index and per-file descriptions |
 | [`tests/`](tests/) | Six suites: four on the numbers, one on standalone-ness, one on vendor drift |
 | [`report/`](report/) | The eleven-chapter written report |
 
@@ -261,14 +261,14 @@ changed.
 
 ## What was evaluated, and what came of it
 
-Six workstreams, sixteen components, one common book, bars written down before each run.
+Six workstreams, eighteen components, one common book, bars written down before each run.
 **Two adoptions.** Full detail, including the reconstruction method and the caveats, in
 [`VERDICTS.md`](VERDICTS.md).
 
 | Workstream | Verdicts |
 |---|---|
-| Arjun | Duration hedge (long TLT) → **ADOPTED** |
-| Theo | Bad-skew exclusion → **ADOPTED** · option-conditioned carry (Aug 5) → **not evaluable**, input never committed |
+| Arjun | Duration hedge (long TLT) → **ADOPTED** · EM relative-vol deleveraging (Aug 12) → **not evaluable as quoted** |
+| Theo | Bad-skew exclusion → **ADOPTED** · option-conditioned carry (Aug 5) → **not evaluable**, input never committed · macro/option optimisation layer (Aug 14) → **not evaluable as committed** |
 | Dafu | VIX percentile gate → **REJECTED**, contested · option insurance → **blocked**, option data is mids-only |
 | Vidhi | Macro/regime probability gate → **REJECTED**, the most destructive component tested |
 | Oleg | **Never tested** — no committed output of any kind |

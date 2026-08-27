@@ -1,5 +1,14 @@
 # `cesare/` — research track and Phase-4 integration
 
+> ### How this work landed
+> **Nine components, no adoptions, and that is the result.** Stages 3–6, the tail-event forecast (the
+> desk's central ask) and the D1/D3/D6 differentiators are all **rejected or null** against bars fixed
+> before each run. The one qualified positive, **D2 — the FX volatility risk premium** — is
+> deliberately **excluded** from the tradable book: it dies inside G10 interbank spreads on its own
+> breakeven grid. This folder also holds the Phase-4 integration that produced the shipped strategy.
+> Verdicts in [`../final/VERDICTS.md`](../final/VERDICTS.md); the deliverable is
+> [`../final/`](../final/).
+
 **Start here:** [`FX_Carry_Strategy_Project_Plan.md`](FX_Carry_Strategy_Project_Plan.md) is the
 repo's **source of truth** — methodology, every stage verdict, the guardrails, and the Appendix A
 output registry. This README is the scannable front door to the folder; the plan is the document
@@ -56,8 +65,13 @@ cesare/
 │
 ├── outputs/                            # 59 committed result CSVs (deliverables — do not delete)
 ├── presentations/                      # the three HTML decks
-└── notes/                              # unsent drafts and superseded material
+└── (notes/ removed at hand-off — see below)
 ```
+
+*`notes/` held four working drafts — a porting-deadline note, a spec request to Theo, an Aug-5
+deck draft and a tooling prompt. It was removed in the 2026-08-27 hand-off cleanup; what those
+drafts said, and when, is recorded in the plan's §19 ledger and in the porting-status tables at
+plan §18.1.*
 
 **Two couplings you must know about before moving anything here:**
 

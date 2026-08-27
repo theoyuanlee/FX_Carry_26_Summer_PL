@@ -36,7 +36,7 @@ those numbers on every run, so drift gets caught immediately.
 | [`tests/test_reconciliation.py`](tests/test_reconciliation.py) | 12 acceptance tests: reconciliation to committed outputs, internal identities, and no-op guards on the hooks. |
 | [`tests/test_episodes.py`](tests/test_episodes.py) | 11 tests on the frozen windows, the per-leg decomposition, and the two v1.1.0 base fixes. |
 | [`tests/test_overlays.py`](tests/test_overlays.py) | 17 tests on composition, the gross-non-increasing contract, and `ExternalLeg` P&L / costs / lag. |
-| [`tests/test_combined.py`](tests/test_combined.py) | 8 tests freezing the `COMBINED` preset: it reproduces the ladder's final row, runs the baseline's window, and stays a superset of the base. |
+| [`tests/test_combined.py`](tests/test_combined.py) | 11 tests freezing the `COMBINED` preset: it reproduces the ladder's final row, runs the baseline's window, and stays a superset of the base. |
 
 That is the whole package: five modules, five examples, four test suites. There is nothing else in
 here — the visual overview of this base now lives with the project's other decks at

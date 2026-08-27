@@ -326,8 +326,8 @@ def build() -> pd.DataFrame:
         measurement="NEVER MEASURED — no committed output to re-price",
         verdict="NEVER TESTED",
         reconstruction=(
-            "Impossible. oleg/ holds four files (~140 KB): 'oleg/ v1/carry_backtest.ipynb', "
-            "'oleg/ v1/carry_utils.py', requirements.txt, and a 0-byte v2/utils.py. There "
+            "Impossible. oleg/ holds four files (~140 KB): 'oleg/v1/carry_backtest.ipynb', "
+            "'oleg/v1/carry_utils.py', requirements.txt, and a 0-byte v2/utils.py. There "
             "is no outputs/ directory and zero to_csv/to_parquet calls anywhere in the "
             "notebook. A G10 book exists as executed cell output (2007-02-01..2026-06-30, "
             "gross Sharpe 0.2109, MaxDD -31.4%) but was never persisted, and "

@@ -188,7 +188,7 @@ A gap stated in the artifact is a gap. A gap omitted from it is a claim.
 
 ### Oleg — never tested
 
-Four files, ~140 KB: `oleg/ v1/carry_backtest.ipynb`, `oleg/ v1/carry_utils.py`,
+Four files, ~140 KB: `oleg/v1/carry_backtest.ipynb`, `oleg/v1/carry_utils.py`,
 `requirements.txt`, and `oleg/v2/utils.py` at **0 bytes**. There is no `outputs/` directory and no
 `to_csv` or `to_parquet` call anywhere in the notebook. A G10 carry book exists as executed cell
 output — 2007-02-01 → 2026-06-30, gross Sharpe 0.2109, MaxDD −31.4% — but it was never persisted,

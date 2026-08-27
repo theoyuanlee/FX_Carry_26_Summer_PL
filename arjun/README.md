@@ -2,6 +2,14 @@
 
 **Arjun** · UChicago Summer Project Lab with Bank of America (Corporate Treasury / Global Funding).
 
+> ### How this work landed
+> **Duration hedge (long TLT) → ADOPTED.** It is one of the two components in the shipped strategy:
+> standalone net Sharpe **0.5145** against the baseline bar of 0.4659, clearing 4 of 6 stress windows
+> both add-one-in and leave-one-out. A later component, **EM relative-vol deleveraging (Aug 12), is
+> not evaluable as quoted** — the table is gross and the bar is net.
+> Full detail in [`../final/VERDICTS.md`](../final/VERDICTS.md); the shipped strategy is
+> [`../final/`](../final/).
+
 ---
 
 ## Overview
