@@ -1,0 +1,16 @@
+indicator_group,column,stress_direction
+fx_volatility,"global_risk__('JPMVXYEM Index', 'PX_LAST')",1.0
+fx_volatility,"global_risk__('JPMVXYG7 Index', 'PX_LAST')",1.0
+fx_volatility,"global_risk__('JPMVXYGL Index', 'PX_LAST')",1.0
+rates_volatility,"global_risk__('MOVE Index', 'PX_LAST')",1.0
+equity_volatility,"global_risk__('VIX Index', 'PX_LAST')",1.0
+broad_dollar,"global_risk__('DXY Curncy', 'PX_LAST')",1.0
+credit_stress,"g10_interest_rates__('CDSO1Z Curncy', 'PX_LAST')",1.0
+credit_stress,"g10_interest_rates__('CDSOA Curncy', 'PX_LAST')",1.0
+credit_stress,"g10_interest_rates__('CDSOC Curncy', 'PX_LAST')",1.0
+equity_growth,"global_risk__('MXEF Index', 'PX_LAST')",-1.0
+equity_growth,"global_risk__('SPX Index', 'PX_LAST')",-1.0
+oil_growth,"global_risk__('CL1 Comdty', 'PX_LAST')",-1.0
+oil_growth,"global_risk__('CO1 Comdty', 'PX_LAST')",-1.0
+industrial_growth,"global_risk__('BCOM Index', 'PX_LAST')",-1.0
+industrial_growth,"global_risk__('HG1 Comdty', 'PX_LAST')",-1.0
