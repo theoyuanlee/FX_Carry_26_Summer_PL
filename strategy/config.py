@@ -18,6 +18,8 @@ from typing import Callable, Sequence
 
 import pandas as pd
 
+from .overlays import ExternalLeg
+
 # Universe rules locked in plan §5.1: HKD/DKK are pegged (degenerate vol) and
 # CNY has no deliverable forwards (CNH is the tradable RMB leg).
 DEFAULT_EXCLUDE: tuple[str, ...] = ("HKD", "DKK", "CNY")
@@ -81,6 +83,15 @@ class StrategyConfig:
     weight_overlay : callable `f(weights, ctx) -> weights` applied last. Use for
         per-currency overlays (an option hedge on the long leg, a manual
         position edit). `ctx` is the `OverlayContext` with the panels.
+    external_legs : tuple of `overlays.ExternalLeg` — non-FX instruments held
+        alongside the book (a bond hedge, a futures overlay). Each adds `Σ w·r`
+        to `gross` and `Σ|Δw|·cost_bps/1e4` to `cost` in `core.run` step 6, so
+        an external instrument earns its return AND pays its own transaction
+        costs. This exists because the two hooks above genuinely cannot express
+        an additional asset: `portfolio_returns` intersects columns and would
+        drop it, and `roundtrip_cost` raises on a name with no half-spread
+        series. Default `()` is an exact no-op. Stack several with
+        `overlays.compose_exposure` / `compose_overlays` for the other two hooks.
     extra_lag : additional days of weight lag ON TOP of the base's own one-day
         lag. 0 for research; 1, 2, 3 for implementation-lag stress tests.
 
@@ -120,6 +131,7 @@ class StrategyConfig:
     # --- overlays -----------------------------------------------------------
     exposure: pd.Series | None = None
     weight_overlay: Callable | None = None
+    external_legs: tuple[ExternalLeg, ...] = ()
     extra_lag: int = 0
 
     # --- costs and window ---------------------------------------------------
@@ -143,6 +155,18 @@ class StrategyConfig:
             raise ValueError(f"extra_lag must be >= 0, got {self.extra_lag}")
         if self.vol_target is not None and self.vol_target <= 0:
             raise ValueError(f"vol_target must be > 0 or None, got {self.vol_target}")
+        if not isinstance(self.external_legs, tuple):
+            raise TypeError(
+                f"external_legs must be a tuple (it is part of a frozen config), "
+                f"got {type(self.external_legs).__name__}")
+        bad = [l for l in self.external_legs if not isinstance(l, ExternalLeg)]
+        if bad:
+            raise TypeError(f"external_legs entries must be ExternalLeg, got {bad}")
+        names = [l.name for l in self.external_legs]
+        if len(set(names)) != len(names):
+            # They become columns of `contrib`, where a duplicate would silently
+            # double-count one leg's P&L and break contrib.sum(1) == gross.
+            raise ValueError(f"external_legs names must be unique, got {names}")
 
     def with_(self, **overrides) -> "StrategyConfig":
         """Copy with fields replaced — the idiomatic way to vary one knob.
@@ -182,6 +206,7 @@ class StrategyConfig:
             "exposure": self.exposure is not None,
             "weight_overlay": getattr(self.weight_overlay, "__name__", None)
             if self.weight_overlay is not None else None,
+            "external_legs": "|".join(l.name for l in self.external_legs) or None,
         }
 
 
@@ -202,4 +227,139 @@ G10_BASELINE = StrategyConfig(universe="G10", name="G10")
 #: EM-only tercile book, for the EM-vs-G10 attribution.
 EM_BASELINE = StrategyConfig(universe="EM", name="EM")
 
-PRESETS = {"ALL": ALL_BASELINE, "G10": G10_BASELINE, "EM": EM_BASELINE}
+
+def combined_preset() -> StrategyConfig:
+    """The frozen Phase-4 combined engine (plan §19.4). `run("COMBINED")`.
+
+    The baseline plus the components that earned a slot under the criterion fixed
+    in advance in `cesare/combined_engine.py`: improve MaxDD or CVaR99 in at
+    least 4 of the 6 pre-2026 stress windows, cost under 0.05 whole-sample net
+    Sharpe, and survive leave-one-out. Two of four components qualified.
+
+    **A callable, not a constant, for two reasons.** It has to build data-derived
+    objects (a hedge-ratio series, an option panel), so evaluating it at import
+    time would make `import strategy` do file IO — and it would run on every
+    teammate's machine whether or not they use the preset. And its inputs are
+    teammates' *committed outputs*, re-priced here rather than rebuilt (§15
+    fallback), so the assembly logic belongs in `cesare/`, not in the shared
+    base. The import below is therefore deliberately lazy and deliberately
+    one-directional: `cesare` imports `strategy`, never the reverse, except at
+    the moment this preset is actually requested.
+
+    Raises `FileNotFoundError` naming the missing file if a teammate's committed
+    input is absent, rather than silently returning a thinner book.
+    """
+    from cesare.combined_engine import combined_components
+    return ALL_BASELINE.with_(name="COMBINED", **combined_components())
+def combined_tail_preset() -> StrategyConfig:
+    """`COMBINED` **plus** the VIX percentile gate. `run("COMBINED_TAIL")`.
+
+    **This is not the shipped strategy.** It is the documented alternative to the
+    one genuinely contested verdict in the project, made runnable so the desk can
+    price the decision instead of taking it on trust. `COMBINED` is the book that
+    ships; this is the book you get if the VIX gate is read in rather than out.
+
+    The contest, in one line: Dafu's gate fails criterion (i) of the §19.4 slot
+    rule measured add-one-in (3 of 6 stress windows, on `duration`), and passes it
+    measured leave-one-out on the stack actually proposed (4 of 6, on
+    `duration|skew_excl`, which guardrail §6.13 privileges). Three of four
+    measurements reject; the fourth accepts. The project ships the rejection
+    because criterion (i) is an add-one-in test by construction, and taking the
+    cost of a pre-registered rule rather than re-reading it after seeing the
+    answer is what pre-registration is for. The cost is real and is stated
+    wherever the verdict is: **0.043 net Sharpe and 5.4% relative CVaR99**.
+
+    Reproduces `p4_combined_ladder.csv` row `ladder=final, rung=3`:
+    gross 0.680807 · net 0.532265 · MaxDD -0.190665 · CVaR99 0.018942 ·
+    turnover 0.605144 · cost drag 0.012298. Those are pre-existing committed
+    numbers, not a new result — the rung was always in the ladder.
+
+    Note the MaxDD is **identical** to `COMBINED`'s, and that is not a bug: the
+    combined book's drawdown episode is 2013-05-17 -> 2013-12-05 and the gate is
+    fully invested on all 145 days of it, so whole-sample MaxDD cannot see this
+    gate at all. CVaR99 is the tail statistic that moves. See `VERDICTS.md`.
+    """
+    from cesare.combined_engine import combined_components
+    return ALL_BASELINE.with_(
+        name="COMBINED_TAIL",
+        **combined_components(["duration", "vix_gate", "skew_excl"]))
+
+
+# ---------------------------------------------------------------------------
+# The delivered menu — one engine, three books (plan §21)
+# ---------------------------------------------------------------------------
+#
+# The desk's Aug 12 condition was that every strategy presented comes with its
+# pros and cons, and that the count stays small. These three are that menu. They
+# are not three strategies: they are one book at three points on a single
+# risk-appetite ladder, and each is strictly more protected than the one above.
+#
+#     OFFENSIVE   no overlays, vol target 15%   -- calm macro, risk-on
+#     CORE        = COMBINED                    -- default, all-weather
+#     DEFENSIVE   = COMBINED_TAIL               -- stress, tail fear
+#
+# CORE and DEFENSIVE are deliberately *aliases* rather than re-definitions. A
+# second definition of a shipped book is a second thing that can drift from the
+# ladder it is supposed to reproduce; an alias cannot. `test_combined.py` asserts
+# the bit-identity rather than trusting the comment.
+#
+# No rule is provided for switching between them, and that omission is the honest
+# part. Every exposure-timing rule this project tested came back null (plan §9,
+# §12, §19.3), so a switching signal is exactly the thing the evidence says not to
+# claim. The ladder is a mandate choice the desk makes, not a signal we trade.
+
+#: Un-overlaid baseline, levered to a 15% vol target. `run("OFFENSIVE")`.
+#:
+#: **A risk dial, not an edge.** Its net Sharpe is 0.4606 against the baseline's
+#: 0.4659 — statistically the same book, deliberately. What changes is the
+#: quantity of it held: 7.64%/yr of return against 5.21%, and a -41.2% maximum
+#: drawdown against -29.3%. Leverage is a mandate parameter, and no alpha is
+#: being claimed for it.
+#:
+#: 15% is the top of a plateau, not an argmax. Across targets 10/12/13/15/18% the
+#: net Sharpe runs 0.4659 / 0.4656 / 0.4645 / 0.4606 / 0.4430 — flat to 15%, then
+#: it breaks as `lev_cap` starts truncating the highest-vol days (0% of days at
+#: the cap at a 10% target, 6.9% at 15%, 17.5% at 18%). Picking the last flat
+#: point rather than the highest number is the rule `examples/04_parameter_sweep.py`
+#: gives teammates: read the grid for plateaus, not peaks.
+#:
+#: The overlays are left OFF on purpose. They are what trims the high-carry EM
+#: names, which is exactly where the good states come from — in the 2022 rates
+#: selloff this book returns +40.2% where CORE returns +9.2%. An offensive mandate
+#: wants that participation; it is also why this book loses the most in a crash.
+OFFENSIVE = ALL_BASELINE.with_(name="OFFENSIVE", vol_target=0.15)
+
+
+def core_preset() -> StrategyConfig:
+    """The shipped book, under its menu name. `run("CORE")` == `run("COMBINED")`.
+
+    An alias, so there is exactly one definition of the strategy. Best Calmar of
+    the three at 0.211, shallowest drawdown at -19.1%, and the only one of the
+    three whose components each cleared the pre-registered slot rule.
+    """
+    return combined_preset().with_(name="CORE")
+
+
+def defensive_preset() -> StrategyConfig:
+    """CORE plus the VIX gate, under its menu name. `run("DEFENSIVE")`.
+
+    **Read the caveat before quoting the ratios.** This book has the best Sharpe
+    (0.5323), Sortino (0.760), Calmar (0.219) and CVaR99 (0.0189) of the three —
+    better than CORE on every one. It is still not the default, because the gate
+    it adds failed the slot rule fixed before any component was measured. That
+    decision costs 0.043 of net Sharpe and it is paid rather than re-argued; see
+    `combined_tail_preset` and `VERDICTS.md`. Offered here as a named mandate for
+    a desk that has decided it is in a stress regime — which is a judgement the
+    desk makes, not one this book forecasts.
+    """
+    return combined_tail_preset().with_(name="DEFENSIVE")
+
+
+#: Five books resolve through callables; ALL/G10/EM/OFFENSIVE are constants.
+#: `COMBINED` is the strategy and `CORE` is its menu name. `COMBINED_TAIL` is the
+#: documented alternative (see `combined_tail_preset`), `DEFENSIVE` its menu name,
+#: and neither is the default anywhere.
+PRESETS = {"ALL": ALL_BASELINE, "G10": G10_BASELINE, "EM": EM_BASELINE,
+           "COMBINED": combined_preset, "COMBINED_TAIL": combined_tail_preset,
+           "OFFENSIVE": OFFENSIVE, "CORE": core_preset,
+           "DEFENSIVE": defensive_preset}

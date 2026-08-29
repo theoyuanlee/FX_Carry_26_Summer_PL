@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hedging the FX Carry Book with Futures</title>
+<style>
+  @page { size: letter; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 8.5in; height: 11in; }
+  body {
+    font-family: "STIX Two Text", "Times New Roman", Times, serif;
+    color: #111;
+    background: #fff;
+    padding: 0.6in 0.92in 0.5in;
+    font-size: 10.6px;
+    line-height: 1.47;
+    display: flex; flex-direction: column;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  p { text-align: justify; hyphens: auto; -webkit-hyphens: auto; }
+
+  /* ---------- title block ---------- */
+  .titleblock { text-align: center; margin-bottom: 10px; }
+  h1 { font-size: 20px; font-weight: 700; line-height: 1.25; margin-bottom: 7px; }
+  .author { font-size: 11.5px; margin-bottom: 2px; }
+  .affil { font-size: 9.8px; font-style: italic; color: #444; }
+
+  /* ---------- abstract ---------- */
+  .abstract { margin: 8px 0.5in 2px; }
+  .abstract .ah { text-align: center; font-size: 10px; font-weight: 700; margin-bottom: 4px;
+                  letter-spacing: 0.4px; }
+  .abstract p { font-size: 9.9px; line-height: 1.5; }
+
+  hr.rule { border: none; border-top: 0.8px solid #111; margin: 9px 0 10px; }
+
+  /* ---------- sections ---------- */
+  h2 { font-size: 12px; font-weight: 700; margin: 10px 0 4px; }
+  h2 .no { margin-right: 9px; }
+  ul.compact { margin: 3px 0 6px 20px; }
+  ul.compact li { margin-bottom: 3.5px; text-align: justify; }
+  i, em { font-style: italic; }
+
+  /* ---------- figure ---------- */
+  figure { margin: 8px 0 2px; }
+  .plot { position: relative; margin: 6px 0 0; }
+  .frow { display: grid; grid-template-columns: 118px 1fr 40px; align-items: center; height: 21px; }
+  .frow .lab { font-size: 10px; text-align: right; padding-right: 10px; white-space: nowrap; }
+  .frow .val { font-size: 10px; padding-left: 7px; font-variant-numeric: tabular-nums; }
+  .track { position: relative; height: 100%; }
+  .bar { position: absolute; left: 0; top: 5.5px; bottom: 5.5px; background: #35618f; }
+  .refs { position: absolute; top: 0; bottom: 18px; left: 118px; right: 40px; pointer-events: none; }
+  .refline { position: absolute; top: -4px; bottom: 0; width: 0; }
+  .refline.dashed { border-left: 1px dashed #777; }
+  .refline.solid  { border-left: 1.2px solid #111; }
+  .axis { position: relative; margin-left: 118px; margin-right: 40px; height: 18px;
+          border-top: 0.8px solid #111; }
+  .tick { position: absolute; top: 0; transform: translateX(-50%); font-size: 8.8px;
+          color: #444; padding-top: 2px; font-variant-numeric: tabular-nums; }
+  .tickmark { position: absolute; top: -3px; width: 0; height: 3px; border-left: 0.8px solid #111; }
+  figcaption { font-size: 9.3px; line-height: 1.45; margin-top: 7px; text-align: justify;
+               color: #222; }
+  figcaption b, caption b { font-weight: 700; }
+
+  /* ---------- table (booktabs) ---------- */
+  .tablewrap { margin: 8px 0 0; }
+  table { width: 100%; border-collapse: collapse; }
+  caption { caption-side: top; font-size: 9.3px; text-align: justify; margin-bottom: 6px; color: #222; }
+  th, td { font-size: 9.9px; padding: 3.5px 8px; text-align: left; vertical-align: top; line-height: 1.4; }
+  thead th { border-top: 1.3px solid #111; border-bottom: 0.8px solid #111; font-weight: 700; }
+  tbody tr:last-child td { border-bottom: 1.3px solid #111; }
+  tbody td:first-child { white-space: nowrap; }
+  td.c, th.c { text-align: center; }
+  td.no { font-variant: small-caps; letter-spacing: 0.3px; }
+
+  /* ---------- conclusion ---------- */
+  .conclusion { margin-top: 8px; }
+  .conclusion p { font-size: 10.6px; }
+
+  footer { margin-top: auto; padding-top: 8px; font-size: 8.6px; color: #666;
+           display: flex; justify-content: space-between; font-style: italic; }
+</style>
+</head>
+<body>
+
+<div class="titleblock">
+  <h1>Hedging the FX Carry Book with Futures:<br>Funding-Currency Overlays and a Five-Class Comparison</h1>
+  <div class="author">Arjun Patel</div>
+  <div class="affil">University of Chicago &times; Bank of America Project Lab &mdash; August 2026</div>
+</div>
+
+<div class="abstract">
+  <div class="ah">Summary</div>
+  <p>We test whether listed futures can hedge a 27-currency (G10 + EM) carry strategy
+  (net Sharpe 0.466), following the assignment: hedge with funding-currency futures such as JPY
+  &mdash; adjusting the hedge ratio, or hedging dynamically &mdash; and compare funding-currency,
+  Treasury, S&amp;P&nbsp;500, DXY, and VIX futures. Every overlay is judged against a simple
+  benchmark: cutting the book&rsquo;s exposure during FX-volatility stress, which alone raises the
+  Sharpe to 0.571. <b>No futures overlay, static or dynamic, beats that benchmark.</b>
+  Full analysis: <span style="font-family: ui-monospace, Menlo, monospace; font-size: 9px;">arjun/hedge_comparison.ipynb</span>.</p>
+</div>
+
+<hr class="rule">
+
+<h2><span class="no">1</span>Why not simply buy JPY?</h2>
+<p>The carry book is <i>short</i> JPY by design &mdash; it funds its high-yield longs by shorting
+the low-yielders, and that funding leg is the G10 book&rsquo;s single best earner. A standing
+long-JPY overlay is therefore just a resizing of a deliberately held, profitable position, and it
+pays the US&ndash;Japan rate differential every day it is on (&minus;1.8%/yr at the hedged size). The only versions
+that could add value are conditional, so we test three designs of increasing sophistication:</p>
+<ul class="compact">
+  <li><b>Hedge-ratio adjustment</b> &mdash; a full sweep of static ratios h from &minus;0.25 to 1,
+      including the variance-minimising ratio h* = 0.52;</li>
+  <li><b>Dynamic hedging</b> &mdash; the ratio re-estimated in real time (expanding and rolling
+      one-year betas, applied with a one-day lag);</li>
+  <li><b>Stress-gating</b> &mdash; the hedge held only while a tradeable FX-volatility trigger is on
+      (about one day in five).</li>
+</ul>
+<p>The insurance is real: on the book&rsquo;s worst 5% of days the JPY overlay pays +34 bp/day, the
+best tail payoff of any instrument tested. But the carry premium eats the payout on every calm day.
+On honest pricing the results rank: de-risking (0.54) &gt; unhedged (0.44) &gt; stress-gated (0.39)
+&gt; static h* (0.31) &gt; dynamic (0.25&ndash;0.27). Dynamic hedging is <i>worst</i> because the
+JPY beta never changes sign &mdash; re-estimation adds noise, never timing.</p>
+
+<h2><span class="no">2</span>The five futures classes compared</h2>
+
+<figure>
+  <div class="plot">
+    <div class="refs">
+      <div class="refline dashed" style="left: 71.7%"></div>
+      <div class="refline solid" style="left: 87.8%"></div>
+    </div>
+    <div class="frow"><div class="lab">JPY futures</div><div class="track"><div class="bar" style="width:47.8%"></div></div><div class="val">0.31</div></div>
+    <div class="frow"><div class="lab">CHF futures</div><div class="track"><div class="bar" style="width:72.2%"></div></div><div class="val">0.47</div></div>
+    <div class="frow"><div class="lab">Treasury futures (5y)</div><div class="track"><div class="bar" style="width:80.9%"></div></div><div class="val">0.53</div></div>
+    <div class="frow"><div class="lab">S&amp;P 500 futures</div><div class="track"><div class="bar" style="width:35.2%"></div></div><div class="val">0.23</div></div>
+    <div class="frow"><div class="lab">DXY futures</div><div class="track"><div class="bar" style="width:64.5%"></div></div><div class="val">0.42</div></div>
+    <div class="frow"><div class="lab">VIX futures</div><div class="track"><div class="bar" style="width:48.5%"></div></div><div class="val">0.31</div></div>
+    <div class="axis">
+      <div class="tickmark" style="left:0%"></div><div class="tick" style="left:0%">0</div>
+      <div class="tickmark" style="left:15.4%"></div><div class="tick" style="left:15.4%">0.1</div>
+      <div class="tickmark" style="left:30.8%"></div><div class="tick" style="left:30.8%">0.2</div>
+      <div class="tickmark" style="left:46.2%"></div><div class="tick" style="left:46.2%">0.3</div>
+      <div class="tickmark" style="left:61.5%"></div><div class="tick" style="left:61.5%">0.4</div>
+      <div class="tickmark" style="left:76.9%"></div><div class="tick" style="left:76.9%">0.5</div>
+      <div class="tickmark" style="left:92.3%"></div><div class="tick" style="left:92.3%">0.6</div>
+    </div>
+  </div>
+  <figcaption><b>Figure 1.</b> Net Sharpe of the book under each class&rsquo;s best static
+  (variance-minimising) hedge, on artifact-free pricing. The dashed line marks the unhedged book
+  (0.466); the solid line marks the de-risking benchmark (0.571). No hedge reaches the benchmark;
+  most fall below doing nothing. Generic futures series overstate the funding-currency hedges by
+  ~2%/yr of non-earnable roll gain; quoted figures use the forward-replica correction.</figcaption>
+</figure>
+
+<div class="tablewrap">
+  <table>
+    <caption><b>Table 1.</b> Verdict by instrument class. &ldquo;Static&rdquo; is the
+    variance-minimising fixed ratio; &ldquo;dynamic&rdquo; is the rolling-beta version.</caption>
+    <thead>
+      <tr><th>Instrument class</th><th class="c">Static</th><th class="c">Dynamic</th><th>Assessment</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>JPY / CHF futures</td><td class="c no">no</td><td class="c no">no</td>
+          <td>Genuine crash insurance at full price; best tail payoff, but negative carry always wins</td></tr>
+      <tr><td>Treasury futures (2y&ndash;30y)</td><td class="c no">no</td><td class="c no">no</td>
+          <td>The only free hedge (right sign, no carry cost) &mdash; but too weak to matter (3&ndash;4% vol reduction)</td></tr>
+      <tr><td>S&amp;P 500 futures</td><td class="c no">no</td><td class="c no">no</td>
+          <td>Wrong direction: the book moves <i>with</i> equities, so hedging sells the equity premium (&minus;2.7%/yr)</td></tr>
+      <tr><td>DXY futures</td><td class="c no">no</td><td class="c no">no</td>
+          <td>Structurally blind: the carry sort is nearly dollar-neutral and DXY contains no EM currencies</td></tr>
+      <tr><td>VIX futures</td><td class="c no">no</td><td class="c no">no</td>
+          <td>Most reliable crash correlation, steepest cost (&minus;33%/yr roll); viable only tiny and episodic</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="conclusion">
+  <h2><span class="no">3</span>Conclusion</h2>
+  <p>Everything that pays in a carry crash &mdash; long JPY, long volatility, short equities &mdash;
+  is priced as insurance and charges for it on every calm day; everything free to hold is either too
+  weak (Treasuries) or blind to the book&rsquo;s emerging-market risk exposure (DXY). The cheapest
+  crash protection is therefore not a hedge but a rule: <b>reduce the book&rsquo;s own exposure when
+  FX volatility spikes</b>, which raises the net Sharpe from 0.466 to 0.571 &mdash; more than any
+  futures overlay tested, at essentially no cost.</p>
+</div>
+
+<footer>
+  <span>Sources: committed strategy returns (team engine); Bloomberg static pull, 2007&ndash;2026.</span>
+  <span>hedge_comparison.ipynb &middot; August 2026</span>
+</footer>
+
+</body>
+</html>

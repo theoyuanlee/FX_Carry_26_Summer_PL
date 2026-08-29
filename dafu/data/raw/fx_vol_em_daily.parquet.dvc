@@ -1,0 +1,5 @@
+outs:
+- md5: 36bfa97c990ab7fff3d724a6f894503c
+  size: 2810670
+  hash: md5
+  path: fx_vol_em_daily.parquet

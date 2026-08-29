@@ -1,0 +1,6 @@
+,sharpe,ann_ret,ann_vol,max_dd,worst_day,vol_red_%,tail_bp_worst5,deviation_carry_%yr,nw_t_vs_book
+unhedged book (ALL_net),0.4659,0.0521,0.1119,-0.3322,-0.0491,0.0,0.0,0.0,
+reconstructed book (G10+EM sleeves),0.6284,0.0703,0.1118,-0.2977,-0.0491,0.0591,1.1786,1.8147,14.2584
+relvol deleverage (the rule),0.6768,0.0717,0.1059,-0.2977,-0.0491,5.3408,15.163,1.9552,3.4254
+naive EM-off in stress,0.7673,0.0771,0.1005,-0.2507,-0.0461,10.1952,45.2692,2.4975,1.8889
+whole-book de-risk control,0.5715,0.0529,0.0926,-0.2637,-0.0418,17.216,60.4812,0.08,0.0567

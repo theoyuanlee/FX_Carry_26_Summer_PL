@@ -1,0 +1,46 @@
+# requirements.txt — the FX carry strategy hand-off package
+#
+# Five packages. This is the complete runtime dependency of everything in
+# final/: the engine, the strategy, the verdict table, the tests and
+# reproduce.py. Derived from the repo-wide requirements.txt by keeping only what
+# this package imports, verified by grep rather than by memory.
+#
+# Python 3.13 (developed against 3.13.5).
+#
+#     pip install -r final/requirements.txt
+#     python final/reproduce.py
+#
+# Deliberately NOT here, and each absence is a decision:
+#   matplotlib / seaborn  -- nothing in final/ plots. The figures live in the
+#                            research folder's decks and notebooks
+#   scikit-learn          -- imported only by the tail-event forecast, which is
+#                            a REJECTED null (VERDICTS.md). Its evidence CSVs
+#                            ship; its code does not, because it is not part of
+#                            the strategy
+#   openpyxl              -- the Bloomberg xlsx supplement was already converted
+#                            to parquet upstream; final/ reads no Excel
+#   jupyter / ipykernel   -- no notebooks in this package by design
+#   xbbg / blpapi         -- a Bloomberg terminal is needed only to REFRESH the
+#                            data. data/raw/ is committed, so reproducing
+#                            anything here needs no terminal and no entitlement
+
+numpy>=2.1          # 2.1.3
+pandas>=2.2         # 2.2.3
+scipy>=1.15         # 1.15.3   scipy.optimize.minimize -> the ERC/MVO weighting
+                    #          schemes, which the baseline does not use but the
+                    #          engine still exposes
+statsmodels>=0.14   # 0.14.6   Newey-West HAC standard errors. Every t-statistic
+                    #          quoted anywhere in this package comes from here
+
+# --- Parquet engine ---
+# Used INDIRECTLY through pandas' pd.read_parquet; never imported by name, which
+# is why it is easy to miss when listing dependencies.
+#
+# ! MUST be the pip build. Conda's pyarrow 19.x CANNOT read this repo's parquet
+#   files, and it fails in a way that looks like data corruption rather than a
+#   version problem -- which costs an afternoon if you have not seen it before.
+#   After any broad conda update:
+#
+#       /opt/anaconda3/bin/pip install -U pyarrow
+#
+pyarrow>=24.0       # 24.0.0

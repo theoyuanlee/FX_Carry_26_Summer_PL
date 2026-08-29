@@ -1,5 +1,20 @@
 # Adaptive FX Carry: When Carry Works
 
+> ### How this work landed
+> **Macro/regime probability gate → REJECTED.** Measured on the common book it was the most
+> destructive component tested: standalone net Sharpe **0.0964** against the baseline's 0.4659, a
+> drag of **−0.3695**, and removing it from the combined stack was worth 0.332. Evidence:
+> `final/evidence/p4_component_standalone.csv` and `p4_combined_ladder.csv`.
+>
+> That verdict is about this specific gate on this specific book, and it is consistent with the
+> project's central finding rather than an outlier from it — **every** exposure-timing rule tested
+> here came back null, because carry compensates a priced risk and de-risking on risk indicators
+> sells the premium roughly one-for-one. Nine attempts failed the same way.
+> Full detail in [`../final/VERDICTS.md`](../final/VERDICTS.md).
+>
+> One output of this workstream **is** vendored into the hand-off package:
+> `outputs/adaptive_strategy_returns_monthly.csv`, in [`../final/inputs/`](../final/inputs/).
+
 Test for an independent regime-aware FX carry research built on shared G10 and EM datasets.
 
 The objective is to research how can the losses be contained under a carry strategy, rather than focusing on increasing the profits.

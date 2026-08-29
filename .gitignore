@@ -1,9 +1,27 @@
-# python / jupyter noise
+# .gitignore — FX Carry, UChicago Summer Project Lab x Bank of America
+#
+# What is NOT ignored, deliberately: `data/raw/*.parquet` and `final/data/raw/`.
+# The Bloomberg snapshots are committed on purpose so that every number in the
+# report reproduces without a terminal. They are the reason this repo is large
+# and the reason it is self-contained; do not add them here.
+
+# --- Python / Jupyter ---
 __pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
 .ipynb_checkpoints/
 
-# macOS
-.DS_Store
+# --- Virtual environments ---
+.venv/
+venv/
+env/
 
-# venv stuff
-*.venv
+# --- macOS / Windows ---
+.DS_Store
+Thumbs.db
+
+# --- Editors & tooling ---
+.vscode/
+.idea/
+.claude/
